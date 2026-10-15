@@ -1,0 +1,1 @@
+{"name":"Twine","short_name":"Twine","description":"a GUI for creating nonlinear stories","start_url":"./","display":"standalone","background_color":"#ffffff","theme_color":"#42b883","lang":"en","scope":"./","icons":[{"src":"./icons/pwa.png","sizes":"1024x1024","type":"image/png"},{"src":"./icons/pwa-maskable.png","purpose":"maskable","sizes":"1024x1024","type":"image/png"}]}

@@ -1,0 +1,26 @@
+# VCS and CI metadata (root-level).
+.git
+.gitignore
+.github
+
+# Local Python environments and caches, at any depth.
+.venv
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.ruff_cache
+**/.ty_cache
+
+# Local runtime data: never bake a database or story sources into the image.
+# The app's dev instance directory is src/instance, hence the **/ prefixes.
+**/instance
+**/*.sqlite
+
+# Not needed to build or run the image; the app package is under src/.
+docs
+tests
+
+# Keep the following in the build context on purpose:
+#   uv.lock                        -- `uv sync --frozen` needs it for a reproducible install.
+#   src/box_of_twine/static/twine/ -- the vendored Twine editor served at runtime.
+# Do not add rules that exclude src/ or uv.lock.

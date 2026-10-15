@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en"{% if theme %} data-theme="{{ theme }}"{% endif %}>
+  <head>
+    <meta charset="utf-8">
+    <title>Log in — Box of Twine</title>
+    <style>
+      @media (prefers-color-scheme: dark) {
+        :root { color-scheme: dark; }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Log in</h1>
+    <form method="post" action="/login">
+      <label for="username">Username</label>
+      <input id="username" name="username" type="text" autocomplete="username">
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password">
+      <button type="submit">Log in</button>
+    </form>
+  </body>
+</html>
