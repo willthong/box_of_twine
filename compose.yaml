@@ -1,0 +1,27 @@
+# Compose stack for Box of Twine.
+#
+# Quickstart:
+#   cp .env.example .env      # then edit SECRET_KEY and the admin credentials
+#   docker compose up -d --build
+#
+# `image` names the artifact CI publishes to GHCR; `build` lets a checkout
+# build the same image locally. `docker compose up` uses a local image if one
+# exists, otherwise it builds; `docker compose pull` fetches the published one.
+services:
+  box-of-twine:
+    image: ghcr.io/willthong/box_of_twine:latest
+    build:
+      context: .
+    ports:
+      - "8000:8000"
+    environment:
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
+      DATA_DIR: /data
+    volumes:
+      - box_of_twine_data:/data
+    restart: unless-stopped
+
+volumes:
+  box_of_twine_data:
