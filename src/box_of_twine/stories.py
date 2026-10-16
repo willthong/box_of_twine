@@ -8,9 +8,10 @@ from flask import Blueprint, current_app, redirect, render_template, request, ur
 from flask_login import current_user, login_required
 
 from .db import get_db
+from .editor import canonical_to_internal, internal_to_canonical
 from .prefs import current_theme
 from .users import get_user_by_id
-from .web import login_page_required
+from .web import anonymous_redirect, login_page_required
 
 bp = Blueprint("stories", __name__)
 
@@ -166,12 +167,47 @@ def index():
 
 
 @bp.get("/stories/<int:story_id>")
-@login_required
 def show(story_id: int):
+    # A browser navigation to Twine's /stories/<id> editor route serves the
+    # shell; anything else keeps the JSON API.
+    wants_html = (
+        request.accept_mimetypes.accept_html
+        and not request.accept_mimetypes.accept_json
+    )
+    if not current_user.is_authenticated:
+        if wants_html:
+            return anonymous_redirect()
+        return "", 401
+
     access = access_for(story_id, current_user.id)
     if access is None:
         return "", 404
+    if wants_html:
+        return _editor_shell(story_id)
     return json.loads(source_path(access.story_owner_id, story_id).read_text())
+
+
+def _editor_shell(story_id: int) -> str:
+    """The Twine shell, seeded with the server story and a bootstrap script."""
+    access = access_for(story_id, current_user.id)
+    assert access is not None
+    source = json.loads(source_path(access.story_owner_id, story_id).read_text())
+    payload = canonical_to_internal(source, story_id)
+    payload["storyId"] = str(story_id)
+    data_json = json.dumps(payload).replace("<", "\\u003c")
+
+    static_folder = current_app.static_folder
+    assert static_folder is not None
+    shell = (Path(static_folder) / "twine" / "index.html").read_text()
+    base = url_for("static", filename="twine/")
+    bootstrap = url_for("static", filename="editor-bootstrap.js")
+    injected = (
+        f'<head>\n\t\t<base href="{base}">\n'
+        f'\t\t<script type="application/json" id="box-of-twine-editor-data">'
+        f'{data_json}</script>\n'
+        f'\t\t<script id="box-of-twine-editor-bootstrap" src="{bootstrap}"></script>'
+    )
+    return shell.replace("<head>", injected, 1)
 
 
 @bp.get("/edit/<int:story_id>")
@@ -181,12 +217,7 @@ def edit(story_id: int):
     # enforced per role at the API seam.
     if access_for(story_id, current_user.id) is None:
         return "", 404
-
-    static_folder = current_app.static_folder
-    assert static_folder is not None
-    shell = (Path(static_folder) / "twine" / "index.html").read_text()
-    base = url_for("static", filename="twine/")
-    return shell.replace("<head>", f'<head>\n\t\t<base href="{base}">', 1)
+    return _editor_shell(story_id)
 
 
 @bp.patch("/stories/<int:story_id>")
@@ -227,6 +258,34 @@ def save(story_id: int):
     db = get_db()
     if "name" in source:
         db.execute("UPDATE stories SET name = ? WHERE id = ?", (source["name"], story_id))
+    if live is not None:
+        db.execute(
+            "UPDATE locks SET expires_at = ? WHERE story_id = ?",
+            (_lease_expires_at(), story_id),
+        )
+    db.commit()
+    return "", 200
+
+
+@bp.put("/stories/<int:story_id>/editor")
+@login_required
+def editor_save(story_id: int):
+    """Save Twine's internal localStorage records as the disk story."""
+    access = access_for(story_id, current_user.id)
+    if access is None:
+        return "", 404
+    if access.role == VIEWER:
+        return "", 403
+
+    live = _live_lock(story_id)
+    if live is not None and live[0] != current_user.id:
+        return "", 409
+
+    source = internal_to_canonical(request.get_json())
+    source_path(access.story_owner_id, story_id).write_text(json.dumps(source))
+
+    db = get_db()
+    db.execute("UPDATE stories SET name = ? WHERE id = ?", (source["name"], story_id))
     if live is not None:
         db.execute(
             "UPDATE locks SET expires_at = ? WHERE story_id = ?",
