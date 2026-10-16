@@ -80,14 +80,19 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # Best-effort only. The default GITHUB_TOKEN cannot change the
+      # visibility of a *user-owned* package (the API returns 404 even when the
+      # token has packages:write), so this must not fail the build. Make the
+      # package public once by hand if it is not already public:
+      #   GitHub → Packages → box_of_twine → Package settings → Change visibility.
+      # (To automate it, add a PAT with packages write/delete as a repo secret.)
       - name: Make the GHCR package public
+        continue-on-error: true
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PACKAGE: ${{ github.event.repository.name }}
           OWNER: ${{ github.repository_owner }}
         run: |
-          # A package published from a private repo is private by default.
-          # Flip it to public: user-owned repos use /user, org-owned use /orgs.
           gh api --method PATCH "/user/packages/container/${PACKAGE}" -f visibility=public \
             || gh api --method PATCH "/orgs/${OWNER}/packages/container/${PACKAGE}" -f visibility=public
