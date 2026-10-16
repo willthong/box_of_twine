@@ -40,7 +40,8 @@ docker run --rm -p 8000:8000 \
 
 The image is based on `python:3.14-slim` and serves the Flask app and the
 vendored editor with gunicorn on port 8000. It declares a named volume at
-`/data` for story sources.
+`/data` for the story sources and the SQLite metadata (users, shares,
+publications, locks, and preferences).
 
 ## Docker Compose
 
@@ -59,13 +60,14 @@ Edit `.env` to set `ADMIN_USERNAME` and `ADMIN_PASSWORD`, then start the stack:
 docker compose up -d --build
 ```
 
-The app is served at http://localhost:8000. Story data lives on the
-`box_of_twine_data` named volume, so it survives `docker compose down`:
+The app is served at http://localhost:8000. `/data` holds the story sources and
+the SQLite metadata, so the `box_of_twine_data` named volume persists users and
+stories as well as their sources across `docker compose down`:
 
 ```sh
 docker compose logs -f box-of-twine   # follow logs
-docker compose down                    # stop, keep story data
-docker compose down -v                 # stop and delete story data
+docker compose down                    # stop, keep users and stories
+docker compose down -v                 # stop and delete users and stories
 ```
 
 To run the image CI publishes to GHCR instead of building locally:

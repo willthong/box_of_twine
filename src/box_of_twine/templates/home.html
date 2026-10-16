@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Stories — Box of Twine{% endblock %}
+{% block body %}
+    <h1>Stories</h1>
+    <p>{{ current_user.username }}</p>
+    <ul>
+      {% for story in stories %}
+      <li><a href="/edit/{{ story['id'] }}">{{ story['name'] }}</a></li>
+      {% endfor %}
+    </ul>
+    <form method="post" action="/stories/new">
+      <label for="name">Name</label>
+      <input id="name" name="name" type="text">
+      <button type="submit">New story</button>
+    </form>
+{% endblock %}

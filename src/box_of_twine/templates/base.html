@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en"{% if theme %} data-theme="{{ theme }}"{% endif %}>
+  <head>
+    <meta charset="utf-8">
+    <title>{% block title %}Box of Twine{% endblock %}</title>
+    <style>
+      @media (prefers-color-scheme: dark) {
+        :root { color-scheme: dark; }
+      }
+    </style>
+    {% block head %}{% endblock %}
+  </head>
+  <body>
+    {% block body %}{% endblock %}
+  </body>
+</html>

@@ -1,13 +1,16 @@
 import json
 import time
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-from flask import Blueprint, current_app, request, url_for
+from flask import Blueprint, current_app, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from .db import get_db
+from .prefs import current_theme
 from .users import get_user_by_id
+from .web import login_page_required
 
 bp = Blueprint("stories", __name__)
 
@@ -30,6 +33,39 @@ def _stories_dir(user_id: int) -> Path:
 
 def source_path(user_id: int, story_id: int) -> Path:
     return _stories_dir(user_id) / f"{story_id}.json"
+
+
+def _new_story_source(name: str) -> dict:
+    """A fresh, empty Harlowe story with a ``Start`` passage and an ifid.
+
+    ``formatVersion`` must match the vendored Harlowe build so the story can be
+    compiled by :mod:`box_of_twine.publications`.
+    """
+    return {
+        "name": name,
+        "ifid": str(uuid.uuid4()).upper(),
+        "format": "Harlowe",
+        "formatVersion": "3.3.9",
+        "start": "Start",
+        "passages": [{"name": "Start", "text": ""}],
+    }
+
+
+def _persist_story(source: dict) -> int:
+    """Write *source* to disk and insert the story's metadata row."""
+    db = get_db()
+    cursor = db.execute(
+        "INSERT INTO stories (owner_id, name) VALUES (?, ?)",
+        (current_user.id, source["name"]),
+    )
+    assert cursor.lastrowid is not None
+    story_id = cursor.lastrowid
+    db.commit()
+
+    path = source_path(current_user.id, story_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(source))
+    return story_id
 
 
 def access_for(story_id: int, user_id: int) -> Access | None:
@@ -83,23 +119,36 @@ def _live_lock(story_id: int) -> tuple[int, float] | None:
     return row["holder_id"], row["expires_at"]
 
 
+@bp.get("/")
+@login_page_required
+def home():
+    stories = (
+        get_db()
+        .execute(
+            "SELECT id, name FROM stories WHERE owner_id = ? "
+            "UNION "
+            "SELECT stories.id, stories.name FROM stories "
+            "JOIN shares ON shares.story_id = stories.id WHERE shares.user_id = ? "
+            "ORDER BY id",
+            (current_user.id, current_user.id),
+        )
+        .fetchall()
+    )
+    return render_template("home.html", theme=current_theme(), stories=stories)
+
+
 @bp.post("/stories")
 @login_required
 def create():
     source = request.get_json()
-    db = get_db()
-    cursor = db.execute(
-        "INSERT INTO stories (owner_id, name) VALUES (?, ?)",
-        (current_user.id, source["name"]),
-    )
-    assert cursor.lastrowid is not None
-    story_id = cursor.lastrowid
-    db.commit()
+    return {"id": _persist_story(source)}, 201
 
-    path = source_path(current_user.id, story_id)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(source))
-    return {"id": story_id}, 201
+
+@bp.post("/stories/new")
+@login_page_required
+def create_from_form():
+    story_id = _persist_story(_new_story_source(request.form["name"]))
+    return redirect(url_for("stories.edit", story_id=story_id), 303)
 
 
 @bp.get("/stories")

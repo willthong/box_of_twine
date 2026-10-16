@@ -10,7 +10,6 @@ def create_app(test_config: dict | None = None) -> Flask:
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_mapping(
         SECRET_KEY=os.environ.get("SECRET_KEY", "dev"),
-        DATABASE=str(Path(app.instance_path) / "box_of_twine.sqlite"),
         DATA_DIR=os.environ.get("DATA_DIR", "/data"),
         ADMIN_USERNAME=os.environ.get("ADMIN_USERNAME"),
         ADMIN_PASSWORD=os.environ.get("ADMIN_PASSWORD"),
@@ -19,7 +18,14 @@ def create_app(test_config: dict | None = None) -> Flask:
     if test_config is not None:
         app.config.update(test_config)
 
+    # The database lives on the data volume unless the config names one. Derive
+    # the default after the test config merge so an explicit DATABASE wins.
+    app.config.setdefault(
+        "DATABASE", str(Path(app.config["DATA_DIR"]) / "box_of_twine.sqlite")
+    )
+
     Path(app.instance_path).mkdir(parents=True, exist_ok=True)
+    Path(app.config["DATA_DIR"]).mkdir(parents=True, exist_ok=True)
 
     db.init_app(app)
 

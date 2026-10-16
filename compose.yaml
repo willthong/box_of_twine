@@ -20,6 +20,9 @@ services:
       SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
       DATA_DIR: /data
     volumes:
+      # /data holds the per-user story sources and the SQLite metadata (users,
+      # stories, shares, publications, locks, prefs), so the named volume
+      # persists users and stories across `docker compose down`.
       - box_of_twine_data:/data
     restart: unless-stopped
 

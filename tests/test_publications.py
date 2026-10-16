@@ -153,6 +153,30 @@ def test_shared_publication_is_reachable_by_a_named_user_but_not_others(
     assert app.test_client().get(f"/p/{slug}").status_code in (401, 403, 404)
 
 
+def test_story_created_from_the_home_form_compiles_when_published(app, client, admin):
+    """Regression: a story minted by the home form must be publishable.
+
+    ``POST /stories/new`` builds the source itself, so it has to carry every
+    field the compiler reads -- in particular the Harlowe ``formatVersion``.
+    """
+    login_as(client, admin)
+
+    created = client.post("/stories/new", data={"name": "Brass Meridian"})
+    assert created.status_code == 303
+    story_id = int(created.headers["Location"].rsplit("/", 1)[-1])
+
+    response = publish(client, story_id, "public")
+    assert response.status_code == 201
+    slug = response.get_json()["slug"]
+
+    html = client.get(f"/p/{slug}").data
+    assert b"Brass Meridian" in html
+    # The story's source data, not a raw template, is compiled in.
+    assert b'"passages"' in html
+    assert b"Start" in html
+    assert b"{{STORY_DATA}}" not in html
+
+
 def test_only_an_owner_can_create_a_publication(app, client, admin):
     bob = make_user(app, "bob")
 

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Users — Box of Twine{% endblock %}
+{% block body %}
+    <h1>Users</h1>
+    <ul>
+      {% for user in users %}
+      <li>
+        {{ user['username'] }}
+        {% if user['is_admin'] %}<span>admin</span>{% endif %}
+        {% if user['disabled'] %}<span>disabled</span>{% endif %}
+        <form method="post" action="/admin/users/{{ user['id'] }}/update">
+          {# A hidden field plus the checkbox means the form always sends both
+             checkboxes, so submitting it never silently clears a state. #}
+          <input type="hidden" name="is_admin" value="off">
+          <input type="hidden" name="disabled" value="off">
+          <label for="password-{{ user['id'] }}">New password</label>
+          <input id="password-{{ user['id'] }}" name="password" type="password">
+          <input id="is-admin-{{ user['id'] }}" name="is_admin" type="checkbox" value="on" aria-label="Admin"{% if user['is_admin'] %} checked{% endif %}>
+          <input id="disabled-{{ user['id'] }}" name="disabled" type="checkbox" value="on" aria-label="Disabled"{% if user['disabled'] %} checked{% endif %}>
+          <button type="submit">Save</button>
+        </form>
+        <form method="post" action="/admin/users/{{ user['id'] }}/delete">
+          <button type="submit">Delete</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+
+    <h2>Create user</h2>
+    <form method="post" action="/admin/users">
+      <p>
+        <label for="new-username">Username</label>
+        <input id="new-username" name="username" type="text" required>
+      </p>
+      <p>
+        <label for="new-password">Password</label>
+        <input id="new-password" name="password" type="password" required>
+      </p>
+      <p>
+        <label for="new-admin">
+          <input id="new-admin" name="is_admin" type="checkbox"> Admin
+        </label>
+      </p>
+      <button type="submit">Create</button>
+    </form>
+{% endblock %}

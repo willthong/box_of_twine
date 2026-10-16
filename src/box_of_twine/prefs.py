@@ -15,6 +15,13 @@ def stored_theme(user_id: int) -> str | None:
     return row["theme"] if row is not None else None
 
 
+def current_theme() -> str | None:
+    """The signed-in user's stored theme, or None for an anonymous visitor."""
+    if not current_user.is_authenticated:
+        return None
+    return stored_theme(current_user.id)
+
+
 def set_theme(user_id: int, theme: str) -> None:
     db = get_db()
     db.execute(
