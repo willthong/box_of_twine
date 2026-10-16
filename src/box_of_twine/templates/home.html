@@ -7,7 +7,7 @@
       {% if current_user.is_admin %}
       <md-text-button href="/admin/users">Users</md-text-button>
       {% endif %}
-      <span class="whoami">{{ current_user.username }}</span>
+      {% include "_user_menu.html" %}
     </header>
     <main class="page">
       <div class="card">

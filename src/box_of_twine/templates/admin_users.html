@@ -4,7 +4,7 @@
     <header class="app-bar">
       <a class="brand" href="/"><h1>Box of Twine</h1></a>
       <span class="spacer"></span>
-      <span class="whoami">{{ current_user.username }}</span>
+      {% include "_user_menu.html" %}
     </header>
     <main class="page">
       <h2>Users</h2>

@@ -1,0 +1,6 @@
+<details class="user-menu">
+  <summary class="whoami">{{ current_user.username }}</summary>
+  <form method="post" action="{{ url_for('auth.logout') }}" class="user-menu-panel">
+    <md-text-button type="submit">Log out</md-text-button>
+  </form>
+</details>

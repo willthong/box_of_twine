@@ -149,6 +149,38 @@ h3 {
   color: var(--md-sys-color-on-surface-variant);
 }
 
+.user-menu {
+  position: relative;
+}
+
+.user-menu summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.user-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.user-menu summary:hover,
+.user-menu[open] summary {
+  color: var(--md-sys-color-on-surface);
+}
+
+.user-menu-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+  padding: 8px;
+  border-radius: 12px;
+  background: var(--md-sys-color-surface-container-high);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 2px 6px 2px rgb(0 0 0 / 0.15);
+}
+
 .page {
   max-width: 760px;
   margin: 0 auto;
