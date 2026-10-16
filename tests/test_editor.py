@@ -162,3 +162,18 @@ def test_story_path_serves_the_editor_shell_for_browser_navigation(
     response = client.get(f"/stories/{story_id}")
     assert response.status_code == 200
     assert response.get_json()["name"] == "The Clockwork Garden"
+
+
+def test_editor_bootstrap_routes_twine_to_the_story_hash_route(client):
+    """Opening the editor must land on Twine's hash route, not the story list.
+
+    The vendored SPA is a HashRouter, so its editor route is
+    ``#/stories/<id>``. The bootstrap rewrites the document URL before Twine's
+    bundle runs; if it changes only the pathname and leaves the hash empty, the
+    router matches no route and renders the story list instead of the story.
+    """
+    response = client.get("/static/editor-bootstrap.js")
+
+    assert response.status_code == 200
+    script = response.get_data(as_text=True)
+    assert '"#/stories/" + storyId' in script

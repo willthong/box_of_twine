@@ -195,9 +195,12 @@
   };
   window.addEventListener("beforeunload", sync);
 
-  // Twine's editor route is /stories/<id>; land there instead of /edit/<id>.
+  // Twine's SPA is a HashRouter, so its editor route is #/stories/<id>. Land
+  // there instead of /edit/<id>; rewriting only the pathname leaves the hash
+  // empty, and the router then falls back to the story list.
   var target = "/stories/" + storyId;
-  if (window.location.pathname !== target) {
-    history.replaceState(null, "", target);
+  var hash = "#/stories/" + storyId;
+  if (window.location.pathname !== target || window.location.hash !== hash) {
+    history.replaceState(null, "", target + hash);
   }
 })();
