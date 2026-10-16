@@ -22,5 +22,5 @@ def login():
         if user is None or not verify_password(user, password) or not user.is_active:
             return render_template("login.html", theme=current_theme()), 401
         login_user(user)
-        return redirect(url_for("auth.login"))
+        return redirect(url_for("stories.home"))
     return render_template("login.html", theme=current_theme())
