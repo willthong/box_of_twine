@@ -60,7 +60,11 @@ class _PageParser(HTMLParser):
                 "method": (attrs.get("method") or "get").lower(),
                 "inputs": {},
             }
-        elif tag == "input" and self._form is not None and attrs.get("name"):
+        elif (
+            tag in ("input", "md-outlined-text-field", "md-filled-text-field")
+            and self._form is not None
+            and attrs.get("name")
+        ):
             self._form["inputs"][attrs["name"]] = attrs.get("type", "text")
 
     def handle_data(self, data):

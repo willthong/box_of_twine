@@ -1,46 +1,68 @@
 {% extends "base.html" %}
 {% block title %}Users — Box of Twine{% endblock %}
 {% block body %}
-    <h1>Users</h1>
-    <ul>
-      {% for user in users %}
-      <li>
-        {{ user['username'] }}
-        {% if user['is_admin'] %}<span>admin</span>{% endif %}
-        {% if user['disabled'] %}<span>disabled</span>{% endif %}
-        <form method="post" action="/admin/users/{{ user['id'] }}/update">
-          {# A hidden field plus the checkbox means the form always sends both
-             checkboxes, so submitting it never silently clears a state. #}
-          <input type="hidden" name="is_admin" value="off">
-          <input type="hidden" name="disabled" value="off">
-          <label for="password-{{ user['id'] }}">New password</label>
-          <input id="password-{{ user['id'] }}" name="password" type="password">
-          <input id="is-admin-{{ user['id'] }}" name="is_admin" type="checkbox" value="on" aria-label="Admin"{% if user['is_admin'] %} checked{% endif %}>
-          <input id="disabled-{{ user['id'] }}" name="disabled" type="checkbox" value="on" aria-label="Disabled"{% if user['disabled'] %} checked{% endif %}>
-          <button type="submit">Save</button>
-        </form>
-        <form method="post" action="/admin/users/{{ user['id'] }}/delete">
-          <button type="submit">Delete</button>
-        </form>
-      </li>
-      {% endfor %}
-    </ul>
+    <header class="app-bar">
+      <a class="brand" href="/"><h1>Box of Twine</h1></a>
+      <span class="spacer"></span>
+      <span class="whoami">{{ current_user.username }}</span>
+    </header>
+    <main class="page">
+      <h2>Users</h2>
+      <ul class="user-list">
+        {% for user in users %}
+        <li class="user-card">
+          <div class="row">
+            <span class="username">{{ user['username'] }}</span>
+            {% if user['is_admin'] %}
+            <span class="status-chip" data-status="admin">admin</span>
+            {% endif %}
+            {% if user['disabled'] %}
+            <span class="status-chip" data-status="disabled">disabled</span>
+            {% endif %}
+          </div>
+          <form method="post"
+                action="/admin/users/{{ user['id'] }}/update"
+                class="row">
+            {# Hidden fields plus the checkboxes mean the form always sends a
+               value for both, so saving never silently clears a flag. #}
+            <input type="hidden" name="is_admin" value="off">
+            <input type="hidden" name="disabled" value="off">
+            <md-outlined-text-field
+                class="grow"
+                name="password"
+                label="New password"
+                type="password"></md-outlined-text-field>
+            <md-checkbox name="is_admin" value="on" aria-label="Admin role"
+                {% if user['is_admin'] %}checked{% endif %}></md-checkbox>
+            <md-checkbox name="disabled" value="on" aria-label="Disabled"
+                {% if user['disabled'] %}checked{% endif %}></md-checkbox>
+            <md-filled-button type="submit">Save</md-filled-button>
+          </form>
+          <form method="post" action="/admin/users/{{ user['id'] }}/delete">
+            <md-outlined-button type="submit">Delete</md-outlined-button>
+          </form>
+        </li>
+        {% endfor %}
+      </ul>
 
-    <h2>Create user</h2>
-    <form method="post" action="/admin/users">
-      <p>
-        <label for="new-username">Username</label>
-        <input id="new-username" name="username" type="text" required>
-      </p>
-      <p>
-        <label for="new-password">Password</label>
-        <input id="new-password" name="password" type="password" required>
-      </p>
-      <p>
-        <label for="new-admin">
-          <input id="new-admin" name="is_admin" type="checkbox"> Admin
-        </label>
-      </p>
-      <button type="submit">Create</button>
-    </form>
+      <div class="card">
+        <h2>Create user</h2>
+        <form method="post" action="/admin/users" class="stack">
+          <md-outlined-text-field
+              name="username"
+              label="Username"
+              required></md-outlined-text-field>
+          <md-outlined-text-field
+              name="password"
+              label="Password"
+              type="password"
+              required></md-outlined-text-field>
+          <label class="row">
+            <md-checkbox name="is_admin" aria-label="Admin role"></md-checkbox>
+            Admin
+          </label>
+          <md-filled-button type="submit">Create</md-filled-button>
+        </form>
+      </div>
+    </main>
 {% endblock %}

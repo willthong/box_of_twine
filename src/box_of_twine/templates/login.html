@@ -1,12 +1,22 @@
 {% extends "base.html" %}
 {% block title %}Log in — Box of Twine{% endblock %}
 {% block body %}
-    <h1>Log in</h1>
-    <form method="post" action="/login">
-      <label for="username">Username</label>
-      <input id="username" name="username" type="text" autocomplete="username">
-      <label for="password">Password</label>
-      <input id="password" name="password" type="password" autocomplete="current-password">
-      <button type="submit">Log in</button>
-    </form>
+    <main class="login-wrap">
+      <div class="card login-card">
+        <h1>Box of Twine</h1>
+        <p>Log in to your stories.</p>
+        <form method="post" action="/login" class="stack">
+          <md-outlined-text-field
+              name="username"
+              label="Username"
+              autocomplete="username"></md-outlined-text-field>
+          <md-outlined-text-field
+              name="password"
+              label="Password"
+              type="password"
+              autocomplete="current-password"></md-outlined-text-field>
+          <md-filled-button type="submit">Log in</md-filled-button>
+        </form>
+      </div>
+    </main>
 {% endblock %}

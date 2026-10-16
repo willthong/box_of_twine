@@ -2,13 +2,11 @@
 <html lang="en"{% if theme %} data-theme="{{ theme }}"{% endif %}>
   <head>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Box of Twine{% endblock %}</title>
-    <style>
-      @media (prefers-color-scheme: dark) {
-        :root { color-scheme: dark; }
-      }
-    </style>
-    {% block head %}{% endblock %}
+    <style>{% include "theme.css" %}</style>
+    <script type="module"
+            src="{{ url_for('static', filename='material/material.js') }}"></script>
   </head>
   <body>
     {% block body %}{% endblock %}
