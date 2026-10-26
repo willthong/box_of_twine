@@ -63,7 +63,36 @@
     return ids.join(",");
   }
 
+  // Passage ids are minted fresh on every shell load, so drop this story's
+  // records from earlier sessions before adding the current set. Otherwise the
+  // twine-passages index grows on each open and Twine's loader attaches every
+  // past copy to the story as a duplicate passage.
+  function removeStoryPassages() {
+    var ids = (localStorage.getItem("twine-passages") || "")
+      .split(",")
+      .filter(Boolean);
+    var keep = [];
+    for (var i = 0; i < ids.length; i++) {
+      var raw = localStorage.getItem("twine-passages-" + ids[i]);
+      var passage = null;
+      if (raw) {
+        try {
+          passage = JSON.parse(raw);
+        } catch (error) {
+          passage = null;
+        }
+      }
+      if (passage && passage.story === storyId) {
+        localStorage.removeItem("twine-passages-" + ids[i]);
+      } else {
+        keep.push(ids[i]);
+      }
+    }
+    localStorage.setItem("twine-passages", keep.join(","));
+  }
+
   // Seed Twine's localStorage without clobbering other entries.
+  removeStoryPassages();
   localStorage.setItem(
     "twine-stories",
     addId(localStorage.getItem("twine-stories"), storyId)
