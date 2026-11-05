@@ -170,9 +170,13 @@ def index():
 def show(story_id: int):
     # A browser navigation to Twine's /stories/<id> editor route serves the
     # shell; anything else keeps the JSON API.
+    # A browser navigation sends text/html with */*;q=0.8, which also matches
+    # JSON. Serve the shell when the client ranks HTML above JSON, not merely
+    # when JSON is absent; */* and no Accept header still get JSON.
+    mimetypes = request.accept_mimetypes
     wants_html = (
-        request.accept_mimetypes.accept_html
-        and not request.accept_mimetypes.accept_json
+        mimetypes.accept_html
+        and mimetypes["text/html"] > mimetypes["application/json"]
     )
     if not current_user.is_authenticated:
         if wants_html:

@@ -216,6 +216,33 @@ def test_story_path_serves_the_editor_shell_for_browser_navigation(
     assert response.get_json()["name"] == "The Clockwork Garden"
 
 
+def test_story_path_prefers_the_shell_when_a_browser_accepts_html(
+    app, client, admin
+):
+    """A real browser's Accept header also allows */*, which matches JSON.
+
+    The route must serve the shell when the browser ranks text/html above
+    application/json, not merely when JSON is absent.
+    """
+    login_as(client, admin)
+    created = client.post("/stories", json=SOURCE)
+    story_id = created.get_json()["id"]
+
+    response = client.get(
+        f"/stories/{story_id}",
+        headers={
+            "Accept": (
+                "text/html,application/xhtml+xml,application/xml;q=0.9,"
+                "image/avif,image/webp,*/*;q=0.8"
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.mimetype == "text/html"
+    assert b'id="box-of-twine-editor-data"' in response.data
+
+
 def test_editor_bootstrap_routes_twine_to_the_story_hash_route(client):
     """Opening the editor must land on Twine's hash route, not the story list.
 
