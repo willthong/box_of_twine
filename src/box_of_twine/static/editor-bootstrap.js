@@ -224,12 +224,26 @@
   };
   window.addEventListener("beforeunload", sync);
 
-  // Twine's SPA is a HashRouter, so its editor route is #/stories/<id>. Land
-  // there instead of /edit/<id>; rewriting only the pathname leaves the hash
-  // empty, and the router then falls back to the story list.
+  // Twine opens Play/Proof/Test in a new window with fragment-only URLs like
+  // #/stories/<id>/test/<passageId>. The injected <base href="/static/twine/">
+  // makes those resolve to /static/twine/, so point them at the story shell.
+  var originalOpen = window.open;
+  window.open = function (url, name, features) {
+    var match = /^#\/stories\/([^/]+)/.exec(url || "");
+    if (match) {
+      url = "/stories/" + match[1] + url;
+    }
+    return originalOpen.call(window, url, name, features);
+  };
+
+  // Twine's SPA is a HashRouter, so its editor route is #/stories/<id>. Move
+  // /edit/<id> to that path, default a missing hash, and leave deeper routes
+  // (play/proof/test) intact so a new window keeps its destination.
   var target = "/stories/" + storyId;
   var hash = "#/stories/" + storyId;
-  if (window.location.pathname !== target || window.location.hash !== hash) {
+  if (window.location.pathname !== target) {
+    history.replaceState(null, "", target + (window.location.hash || hash));
+  } else if (!window.location.hash) {
     history.replaceState(null, "", target + hash);
   }
 })();

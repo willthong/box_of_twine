@@ -43,8 +43,12 @@ class Store {
   }
 }
 
-function openEditor(store, storyId, passages) {
-  const location = { pathname: `/edit/${storyId}`, hash: "" };
+function openEditor(store, storyId, passages, options = {}) {
+  const location = {
+    pathname: options.pathname || `/edit/${storyId}`,
+    hash: options.hash || "",
+  };
+  const openCalls = [];
   const payload = {
     storyId: String(storyId),
     story: {
@@ -83,10 +87,14 @@ function openEditor(store, storyId, passages) {
   };
   sandbox.window = sandbox;
   sandbox.window.location = location;
+  sandbox.window.open = (url, name, features) => {
+    openCalls.push({ url, name, features });
+    return {};
+  };
   sandbox.window.addEventListener = () => {};
   vm.createContext(sandbox);
   vm.runInContext(BOOTSTRAP, sandbox);
-  return location;
+  return { location, sandbox, openCalls };
 }
 
 function twinePassagesFor(store, storyId) {
@@ -135,4 +143,59 @@ assert.strictEqual(
   "opening story 1 must leave exactly its own two passages"
 );
 
-console.log("editor bootstrap replaces a story's passages instead of appending");
+// Twine opens Play/Proof/Test as fragment-only URLs; the injected
+// <base href="/static/twine/"> would otherwise send them to /static/twine/.
+const opener = openEditor(new Store(), 6, mintPassages(["Start"], 6));
+opener.sandbox.window.open("#/stories/6/test/passage-1", "_blank");
+assert.strictEqual(
+  opener.openCalls.at(-1).url,
+  "/stories/6#/stories/6/test/passage-1",
+  "test links must open the story shell, not /static/twine/"
+);
+opener.sandbox.window.open("#/stories/6/play", "_blank");
+assert.strictEqual(
+  opener.openCalls.at(-1).url,
+  "/stories/6#/stories/6/play",
+  "play links must open the story shell"
+);
+opener.sandbox.window.open("https://example.com/x", "_blank");
+assert.strictEqual(
+  opener.openCalls.at(-1).url,
+  "https://example.com/x",
+  "non-Twine links must pass through unchanged"
+);
+
+// A bare /stories/<id> load still has to land on the story route.
+const bare = openEditor(new Store(), 6, mintPassages(["Start"], 6), {
+  pathname: "/stories/6",
+  hash: "",
+});
+assert.deepStrictEqual(
+  bare.location,
+  { pathname: "/stories/6", hash: "#/stories/6" },
+  "a bare story URL must default to the story hash route"
+);
+
+// Moving /edit/<id> to /stories/<id> must keep a deep route.
+const fromEdit = openEditor(new Store(), 6, mintPassages(["Start"], 6), {
+  pathname: "/edit/6",
+  hash: "#/stories/6/test/passage-1",
+});
+assert.deepStrictEqual(
+  fromEdit.location,
+  { pathname: "/stories/6", hash: "#/stories/6/test/passage-1" },
+  "moving /edit to /stories must preserve a deep route"
+);
+
+// A deeper hash route on the canonical path must survive the shell load.
+const deep = openEditor(new Store(), 6, mintPassages(["Start"], 6), {
+  pathname: "/stories/6",
+  hash: "#/stories/6/test/passage-1",
+});
+assert.deepStrictEqual(
+  deep.location,
+  { pathname: "/stories/6", hash: "#/stories/6/test/passage-1" },
+  "loading the shell must not rewrite a test route back to the story"
+);
+
+console.log("editor bootstrap preserves story storage and Twine routes");
