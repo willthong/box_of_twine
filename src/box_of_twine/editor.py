@@ -2,7 +2,8 @@
 
 The canonical story on disk is the story-format JSON shape Twine consumes when
 compiling: ``name``, ``ifid``, ``format``, ``formatVersion``, ``start`` (a
-passage name), and a list of ``passages`` each with ``name`` and ``text``.
+passage name), and a list of ``passages`` each with ``name`` and ``text``,
+optionally ``tags`` and canvas ``left``/``top`` coordinates.
 
 Twine's own editor keeps stories in ``localStorage`` under a private shape:
 ``twine-stories-<id>`` holds a story record (``storyFormat``,
@@ -41,8 +42,8 @@ def canonical_to_internal(source: dict, story_id: int) -> dict:
                 "name": passage["name"],
                 "text": passage.get("text", ""),
                 "tags": passage.get("tags", []),
-                "left": 0,
-                "top": 0,
+                "left": passage.get("left", 0),
+                "top": passage.get("top", 0),
                 "width": 100,
                 "height": 100,
                 "selected": False,
@@ -104,4 +105,8 @@ def _passage_to_source(passage: dict) -> dict:
     source = {"name": passage["name"], "text": passage.get("text", "")}
     if passage.get("tags"):
         source["tags"] = passage["tags"]
+    if passage.get("left", 0) != 0:
+        source["left"] = passage["left"]
+    if passage.get("top", 0) != 0:
+        source["top"] = passage["top"]
     return source

@@ -142,6 +142,58 @@ def test_editor_save_persists_twine_internal_records_as_the_disk_story(
     assert response.get_json()["name"] == "Brass Meridian"
 
 
+def test_editor_save_persists_passage_positions(app, client, admin):
+    login_as(client, admin)
+    created = client.post("/stories", json=SOURCE)
+    story_id = created.get_json()["id"]
+
+    internal = canonical_to_internal(SOURCE, story_id=story_id)
+    internal["passages"][0]["left"] = 140
+    internal["passages"][0]["top"] = 90
+
+    response = client.put(f"/stories/{story_id}/editor", json=internal)
+    assert response.status_code == 200
+
+    saved = json.loads(story_source_path(app, admin["id"], story_id).read_text())
+    positions = {p["name"]: (p.get("left"), p.get("top")) for p in saved["passages"]}
+    assert positions["Start"] == (140, 90)
+
+
+def test_editor_shell_restores_passage_positions(app, client, admin):
+    login_as(client, admin)
+    positioned = {
+        **SOURCE,
+        "passages": [
+            {
+                "name": "Start",
+                "text": "You wake in a garden of brass.",
+                "left": 140,
+                "top": 90,
+            },
+            {
+                "name": "Gate",
+                "text": "A gate hums with clockwork.",
+                "left": 320,
+                "top": 260,
+            },
+        ],
+    }
+    created = client.post("/stories", json=positioned)
+    story_id = created.get_json()["id"]
+
+    response = client.get(f"/edit/{story_id}")
+    assert response.status_code == 200
+
+    payload = json.loads(
+        response.data.split(b'id="box-of-twine-editor-data">')[1].split(b"</script>")[0]
+    )
+    positions = {
+        passage["name"]: (passage["left"], passage["top"])
+        for passage in payload["passages"]
+    }
+    assert positions == {"Start": (140, 90), "Gate": (320, 260)}
+
+
 def test_story_path_serves_the_editor_shell_for_browser_navigation(
     app, client, admin
 ):
