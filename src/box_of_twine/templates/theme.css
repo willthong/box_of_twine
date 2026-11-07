@@ -324,6 +324,15 @@ h3 {
   background: var(--md-sys-color-surface-container-high);
 }
 
+.story-menu-item.danger {
+  color: var(--md-sys-color-error);
+}
+
+.danger-button {
+  --md-filled-button-container-color: var(--md-sys-color-error);
+  --md-filled-button-label-text-color: var(--md-sys-color-on-error);
+}
+
 .story-dialog {
   width: min(560px, calc(100vw - 32px));
   padding: 24px;

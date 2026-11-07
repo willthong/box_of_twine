@@ -36,6 +36,10 @@
                 {% endif %}
                 <button type="button" class="story-menu-item"
                         role="menuitem" data-story-action="public-link">Copy public link</button>
+                {% if story['role'] == 'owner' %}
+                <button type="button" class="story-menu-item danger"
+                        role="menuitem" data-story-action="delete">Delete story</button>
+                {% endif %}
               </div>
             </details>
           </li>
@@ -104,6 +108,23 @@
           <md-text-button type="button" data-dialog-close>Close</md-text-button>
         </div>
       </div>
+    </dialog>
+
+    <dialog class="story-dialog" id="delete-dialog">
+      <form class="stack" data-delete-form>
+        <h2>Delete story?</h2>
+        <p>
+          This permanently deletes <strong data-delete-story-name></strong>
+          and cannot be undone.
+        </p>
+        <p class="dialog-error" data-error hidden></p>
+        <div class="row dialog-actions">
+          <md-text-button type="button" data-dialog-close>Cancel</md-text-button>
+          <md-filled-button class="danger-button" type="submit">
+            Delete story
+          </md-filled-button>
+        </div>
+      </form>
     </dialog>
 
     <dialog class="story-dialog" id="public-link-dialog">

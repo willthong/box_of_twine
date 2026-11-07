@@ -8,9 +8,11 @@ const currentUserId = page ? Number(page.dataset.currentUserId) : null;
 
 const renameDialog = document.getElementById("rename-dialog");
 const sharesDialog = document.getElementById("shares-dialog");
+const deleteDialog = document.getElementById("delete-dialog");
 const publicLinkDialog = document.getElementById("public-link-dialog");
 
 const renameForm = renameDialog && renameDialog.querySelector("[data-rename-form]");
+const deleteForm = deleteDialog && deleteDialog.querySelector("[data-delete-form]");
 const shareGrantForm =
   sharesDialog && sharesDialog.querySelector("[data-share-grant]");
 const shareUsers = sharesDialog && sharesDialog.querySelector("[data-share-users]");
@@ -194,6 +196,15 @@ async function openRename(story) {
   renameDialog.showModal();
 }
 
+function openDelete(story) {
+  clearError(deleteDialog);
+  const name = deleteDialog.querySelector("[data-delete-story-name]");
+  if (name) {
+    name.textContent = story.name;
+  }
+  deleteDialog.showModal();
+}
+
 async function openShares(story) {
   clearError(sharesDialog);
   if (shareList) {
@@ -307,6 +318,8 @@ document.addEventListener("click", (event) => {
     openRename(currentStory);
   } else if (action.dataset.storyAction === "shares") {
     openShares(currentStory);
+  } else if (action.dataset.storyAction === "delete") {
+    openDelete(currentStory);
   } else if (action.dataset.storyAction === "public-link") {
     openPublicLink(currentStory);
   }
@@ -337,6 +350,31 @@ if (renameForm) {
       renameDialog.close();
     } catch (error) {
       showError(renameDialog, error.message);
+    }
+  });
+}
+
+if (deleteForm) {
+  deleteForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    clearError(deleteDialog);
+    try {
+      await request(`/stories/${currentStory.id}`, { method: "DELETE" });
+      const row = document.querySelector(
+        `.story-row[data-story-id="${currentStory.id}"]`
+      );
+      if (row) {
+        row.remove();
+      }
+      const list = document.querySelector(".story-list");
+      if (list && !list.querySelector(".story-row")) {
+        const empty = document.createElement("p");
+        empty.textContent = "No stories yet — create one below.";
+        list.replaceWith(empty);
+      }
+      deleteDialog.close();
+    } catch (error) {
+      showError(deleteDialog, error.message);
     }
   });
 }

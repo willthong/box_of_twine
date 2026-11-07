@@ -125,6 +125,29 @@ def test_kebab_menu_offers_actions_for_each_role(app, admin):
     assert "Copy public link" in rows[str(viewer_story)]["text"]
 
 
+def test_delete_action_is_offered_only_to_the_owner(app, admin):
+    owner_story = make_story_for(app, admin, "owner-user", "owner")
+    editor_story = make_story_for(app, admin, "editor-user", "editor")
+    viewer_story = make_story_for(app, admin, "viewer-user", "viewer")
+
+    rows = home_rows(signed_in(app, "owner-user").get("/").data)
+    assert "Delete story" in rows[str(owner_story)]["text"]
+
+    rows = home_rows(signed_in(app, "editor-user").get("/").data)
+    assert "Delete story" not in rows[str(editor_story)]["text"]
+
+    rows = home_rows(signed_in(app, "viewer-user").get("/").data)
+    assert "Delete story" not in rows[str(viewer_story)]["text"]
+
+
+def test_home_has_a_delete_story_confirmation_dialog(app, admin):
+    make_story_for(app, admin, "bob", "owner")
+    html = signed_in(app, "bob").get("/").data
+
+    assert b'data-delete-form' in html
+    assert b'data-delete-story-name' in html
+
+
 def test_home_loads_the_story_management_module_and_dialogs(app, admin):
     make_story_for(app, admin, "bob", "editor")
     html = signed_in(app, "bob").get("/").data
