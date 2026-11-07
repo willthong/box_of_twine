@@ -123,19 +123,36 @@ def _live_lock(story_id: int) -> tuple[int, float] | None:
 @bp.get("/")
 @login_page_required
 def home():
-    stories = (
+    rows = (
         get_db()
         .execute(
-            "SELECT id, name FROM stories WHERE owner_id = ? "
+            "SELECT id, name, owner_id FROM stories WHERE owner_id = ? "
             "UNION "
-            "SELECT stories.id, stories.name FROM stories "
+            "SELECT stories.id, stories.name, stories.owner_id FROM stories "
             "JOIN shares ON shares.story_id = stories.id WHERE shares.user_id = ? "
             "ORDER BY id",
             (current_user.id, current_user.id),
         )
         .fetchall()
     )
-    return render_template("home.html", theme=current_theme(), stories=stories)
+    stories = []
+    for row in rows:
+        access = access_for(row["id"], current_user.id)
+        assert access is not None
+        stories.append(
+            {
+                "id": row["id"],
+                "name": row["name"],
+                "owner_id": row["owner_id"],
+                "role": access.role,
+            }
+        )
+    return render_template(
+        "home.html",
+        theme=current_theme(),
+        stories=stories,
+        current_user_id=current_user.id,
+    )
 
 
 @bp.post("/stories")
@@ -227,12 +244,14 @@ def edit(story_id: int):
 @bp.patch("/stories/<int:story_id>")
 @login_required
 def update(story_id: int):
-    owner_id = owner_id_for(story_id, current_user.id)
-    if owner_id is None:
+    access = access_for(story_id, current_user.id)
+    if access is None:
         return "", 404
+    if access.role == VIEWER:
+        return "", 403
 
     name = request.get_json()["name"]
-    path = source_path(owner_id, story_id)
+    path = source_path(access.story_owner_id, story_id)
     source = json.loads(path.read_text())
     source["name"] = name
     path.write_text(json.dumps(source))
@@ -350,11 +369,53 @@ def share(story_id: int):
     data = request.get_json()
     db = get_db()
     db.execute(
-        "INSERT INTO shares (story_id, user_id, role) VALUES (?, ?, ?)",
+        "INSERT INTO shares (story_id, user_id, role) VALUES (?, ?, ?) "
+        "ON CONFLICT(story_id, user_id) DO UPDATE SET role = excluded.role",
         (story_id, data["user_id"], data["role"]),
     )
     db.commit()
     return "", 201
+
+
+@bp.get("/stories/<int:story_id>/shares")
+@login_required
+def shares(story_id: int):
+    if owner_id_for(story_id, current_user.id) is None:
+        return "", 404
+
+    rows = (
+        get_db()
+        .execute(
+            "SELECT shares.user_id, users.username, shares.role "
+            "FROM shares JOIN users ON users.id = shares.user_id "
+            "WHERE shares.story_id = ? ORDER BY shares.user_id",
+            (story_id,),
+        )
+        .fetchall()
+    )
+    return [
+        {
+            "user_id": row["user_id"],
+            "username": row["username"],
+            "role": row["role"],
+        }
+        for row in rows
+    ]
+
+
+@bp.delete("/stories/<int:story_id>/shares/<int:user_id>")
+@login_required
+def unshare(story_id: int, user_id: int):
+    if owner_id_for(story_id, current_user.id) is None:
+        return "", 404
+
+    db = get_db()
+    db.execute(
+        "DELETE FROM shares WHERE story_id = ? AND user_id = ?",
+        (story_id, user_id),
+    )
+    db.commit()
+    return "", 204
 
 
 @bp.delete("/stories/<int:story_id>")
@@ -367,6 +428,7 @@ def delete(story_id: int):
     db = get_db()
     db.execute("DELETE FROM shares WHERE story_id = ?", (story_id,))
     db.execute("DELETE FROM publications WHERE story_id = ?", (story_id,))
+    db.execute("DELETE FROM public_links WHERE story_id = ?", (story_id,))
     db.execute("DELETE FROM locks WHERE story_id = ?", (story_id,))
     db.execute("DELETE FROM stories WHERE id = ?", (story_id,))
     db.commit()

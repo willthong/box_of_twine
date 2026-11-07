@@ -13,7 +13,7 @@ from flask import (
     request,
     url_for,
 )
-from flask_login import UserMixin, current_user
+from flask_login import UserMixin, current_user, login_required
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .db import get_db
@@ -148,6 +148,7 @@ def delete_user(user_id: int) -> None:
     for story_id in story_ids:
         db.execute("DELETE FROM shares WHERE story_id = ?", (story_id,))
         db.execute("DELETE FROM publications WHERE story_id = ?", (story_id,))
+        db.execute("DELETE FROM public_links WHERE story_id = ?", (story_id,))
         db.execute("DELETE FROM locks WHERE story_id = ?", (story_id,))
     db.execute("DELETE FROM stories WHERE owner_id = ?", (user_id,))
     # Shares the user holds on other people's stories, and any lock they hold.
@@ -195,6 +196,20 @@ def update_from_form(user_id: int):
 def delete_from_form(user_id: int):
     delete_user(user_id)
     return redirect(url_for("users.admin_users"), 303)
+
+
+@bp.get("/users")
+@login_required
+def index():
+    rows = get_db().execute("SELECT id, username, disabled FROM users ORDER BY id")
+    return [
+        {
+            "id": row["id"],
+            "username": row["username"],
+            "disabled": bool(row["disabled"]),
+        }
+        for row in rows
+    ]
 
 
 @bp.post("/users")

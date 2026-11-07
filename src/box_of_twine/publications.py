@@ -57,6 +57,72 @@ def create(story_id: int):
     return {"slug": slug}, 201
 
 
+@bp.post("/stories/<int:story_id>/public-link")
+@login_required
+def create_link(story_id: int):
+    if owner_id_for(story_id, current_user.id) is None:
+        return "", 404
+
+    db = get_db()
+    slug = secrets.token_urlsafe(12)
+    db.execute(
+        "INSERT INTO public_links (story_id, slug) VALUES (?, ?) "
+        "ON CONFLICT(story_id) DO NOTHING",
+        (story_id, slug),
+    )
+    db.commit()
+    row = db.execute(
+        "SELECT slug FROM public_links WHERE story_id = ?", (story_id,)
+    ).fetchone()
+    assert row is not None
+    return {"slug": row["slug"]}, 201
+
+
+@bp.get("/stories/<int:story_id>/public-link")
+@login_required
+def read_link(story_id: int):
+    if access_for(story_id, current_user.id) is None:
+        return "", 404
+
+    row = (
+        get_db()
+        .execute("SELECT slug FROM public_links WHERE story_id = ?", (story_id,))
+        .fetchone()
+    )
+    return {"slug": row["slug"] if row is not None else None}
+
+
+@bp.delete("/stories/<int:story_id>/public-link")
+@login_required
+def revoke_link(story_id: int):
+    if owner_id_for(story_id, current_user.id) is None:
+        return "", 404
+
+    db = get_db()
+    db.execute("DELETE FROM public_links WHERE story_id = ?", (story_id,))
+    db.commit()
+    return "", 204
+
+
+@bp.get("/public/<slug>")
+def show_public(slug: str):
+    row = (
+        get_db()
+        .execute(
+            "SELECT stories.owner_id, public_links.story_id FROM public_links "
+            "JOIN stories ON stories.id = public_links.story_id "
+            "WHERE public_links.slug = ?",
+            (slug,),
+        )
+        .fetchone()
+    )
+    if row is None:
+        return "", 404
+
+    source = json.loads(source_path(row["owner_id"], row["story_id"]).read_text())
+    return Response(_compile(source), mimetype="text/html")
+
+
 @bp.get("/p/<slug>")
 def show(slug: str):
     row = (

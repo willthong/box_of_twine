@@ -9,13 +9,36 @@
       {% endif %}
       {% include "_user_menu.html" %}
     </header>
-    <main class="page">
+    <main class="page" data-current-user-id="{{ current_user_id }}">
       <div class="card">
         <h2>Your stories</h2>
         {% if stories %}
         <ul class="story-list">
           {% for story in stories %}
-          <li><a href="/edit/{{ story['id'] }}">{{ story['name'] }}</a></li>
+          <li class="story-row"
+              data-story-id="{{ story['id'] }}"
+              data-story-name="{{ story['name'] }}"
+              data-story-role="{{ story['role'] }}"
+              data-story-owner-id="{{ story['owner_id'] }}">
+            <a class="story-link" href="/edit/{{ story['id'] }}">{{ story['name'] }}</a>
+            <details class="story-menu">
+              <summary class="story-menu-button"
+                       aria-label="Story actions for {{ story['name'] }}"
+                       title="Story actions">⋮</summary>
+              <div class="story-menu-panel" role="menu">
+                {% if story['role'] in ('owner', 'editor') %}
+                <button type="button" class="story-menu-item"
+                        role="menuitem" data-story-action="rename">Rename</button>
+                {% endif %}
+                {% if story['role'] == 'owner' %}
+                <button type="button" class="story-menu-item"
+                        role="menuitem" data-story-action="shares">Manage access</button>
+                {% endif %}
+                <button type="button" class="story-menu-item"
+                        role="menuitem" data-story-action="public-link">Copy public link</button>
+              </div>
+            </details>
+          </li>
           {% endfor %}
         </ul>
         {% else %}
@@ -35,4 +58,68 @@
         </form>
       </div>
     </main>
+
+    <dialog class="story-dialog" id="rename-dialog">
+      <form class="stack" data-rename-form>
+        <h2>Rename story</h2>
+        <md-outlined-text-field
+            class="grow"
+            name="name"
+            label="Story name"
+            required></md-outlined-text-field>
+        <p class="dialog-error" data-error hidden></p>
+        <div class="row dialog-actions">
+          <md-text-button type="button" data-dialog-close>Cancel</md-text-button>
+          <md-filled-button type="submit">Save</md-filled-button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="story-dialog" id="shares-dialog">
+      <div class="stack">
+        <h2>Manage access</h2>
+        <form class="row" data-share-grant>
+          <label class="stack compact">
+            <span>User</span>
+            <select name="user_id" required data-share-users></select>
+          </label>
+          <label class="stack compact">
+            <span>Role</span>
+            <select name="role" data-share-role>
+              <option value="viewer">viewer</option>
+              <option value="editor">editor</option>
+              <option value="owner">owner</option>
+            </select>
+          </label>
+          <md-filled-button type="submit">Share</md-filled-button>
+        </form>
+        <p class="dialog-error" data-error hidden></p>
+        <ul class="share-list" data-share-list></ul>
+        <div class="row dialog-actions">
+          <md-text-button type="button" data-dialog-close>Close</md-text-button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog class="story-dialog" id="public-link-dialog">
+      <div class="stack">
+        <h2>Public link</h2>
+        <p data-public-link-status>Loading…</p>
+        <input class="public-link-url"
+               data-public-link-url
+               readonly
+               aria-label="Public link">
+        <p class="dialog-error" data-error hidden></p>
+        <div class="row dialog-actions">
+          <md-text-button type="button" data-public-link-copy>Copy</md-text-button>
+          <md-outlined-button type="button" data-public-link-revoke hidden>
+            Revoke
+          </md-outlined-button>
+          <md-text-button type="button" data-dialog-close>Close</md-text-button>
+        </div>
+      </div>
+    </dialog>
+
+    <script type="module"
+            src="{{ url_for('static', filename='story-management.js') }}"></script>
 {% endblock %}

@@ -20,14 +20,29 @@ CREATE TABLE IF NOT EXISTS stories (
 CREATE TABLE IF NOT EXISTS shares (
     story_id INTEGER NOT NULL,
     user_id INTEGER NOT NULL,
-    role TEXT NOT NULL
+    role TEXT NOT NULL,
+    UNIQUE (story_id, user_id)
 );
+
+-- Older databases predate the uniqueness constraint. Collapse any duplicate
+-- grants (last write wins) before adding the index that makes sharing upsert.
+DELETE FROM shares
+WHERE rowid NOT IN (
+    SELECT MAX(rowid) FROM shares GROUP BY story_id, user_id
+);
+CREATE UNIQUE INDEX IF NOT EXISTS shares_story_user
+    ON shares (story_id, user_id);
 
 CREATE TABLE IF NOT EXISTS publications (
     story_id INTEGER NOT NULL,
     slug TEXT NOT NULL,
     visibility TEXT NOT NULL,
     html TEXT
+);
+
+CREATE TABLE IF NOT EXISTS public_links (
+    story_id INTEGER PRIMARY KEY,
+    slug TEXT NOT NULL UNIQUE
 );
 
 CREATE TABLE IF NOT EXISTS locks (
