@@ -269,6 +269,23 @@ async function openPublicLink(story) {
 }
 
 document.addEventListener("click", (event) => {
+  for (const menu of document.querySelectorAll(".story-menu[open]")) {
+    if (!menu.contains(event.target)) {
+      menu.open = false;
+    }
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") {
+    return;
+  }
+  for (const menu of document.querySelectorAll(".story-menu[open]")) {
+    menu.open = false;
+  }
+});
+
+document.addEventListener("click", (event) => {
   const action = event.target.closest("[data-story-action]");
   if (!action) {
     return;
