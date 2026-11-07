@@ -428,3 +428,13 @@ md-filled-button,
 md-outlined-button {
   --md-outlined-text-field-container-shape: 12px;
 }
+
+md-outlined-select {
+  min-width: 160px;
+  --md-outlined-select-text-field-container-shape: 12px;
+}
+
+.share-row md-outlined-select {
+  min-width: 128px;
+  flex: 0 1 160px;
+}

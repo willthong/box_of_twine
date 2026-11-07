@@ -133,6 +133,8 @@ def test_home_loads_the_story_management_module_and_dialogs(app, admin):
     assert b"<dialog" in html
     assert b'data-current-user-id="' in html
     assert b"\xe2\x8b\xae" in html
+    assert b"md-outlined-select" in html
+    assert b"md-select-option" in html
 
 
 def test_story_management_module_calls_the_json_seams(client):

@@ -79,18 +79,23 @@
       <div class="stack">
         <h2>Manage access</h2>
         <form class="row" data-share-grant>
-          <label class="stack compact">
-            <span>User</span>
-            <select name="user_id" required data-share-users></select>
-          </label>
-          <label class="stack compact">
-            <span>Role</span>
-            <select name="role" data-share-role>
-              <option value="viewer">viewer</option>
-              <option value="editor">editor</option>
-              <option value="owner">owner</option>
-            </select>
-          </label>
+          <md-outlined-select
+              class="grow"
+              name="user_id"
+              label="User"
+              required
+              data-share-users></md-outlined-select>
+          <md-outlined-select name="role" label="Role" value="viewer" data-share-role>
+            <md-select-option value="viewer" selected>
+              <span slot="headline">viewer</span>
+            </md-select-option>
+            <md-select-option value="editor">
+              <span slot="headline">editor</span>
+            </md-select-option>
+            <md-select-option value="owner">
+              <span slot="headline">owner</span>
+            </md-select-option>
+          </md-outlined-select>
           <md-filled-button type="submit">Share</md-filled-button>
         </form>
         <p class="dialog-error" data-error hidden></p>

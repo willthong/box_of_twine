@@ -72,16 +72,20 @@ function clearError(dialog) {
 }
 
 function roleSelect(value) {
-  const select = document.createElement("select");
+  const select = document.createElement("md-outlined-select");
+  select.setAttribute("label", "Role");
   select.setAttribute("data-share-change", "");
-  select.setAttribute("aria-label", "Role");
   for (const role of ["viewer", "editor", "owner"]) {
-    const option = document.createElement("option");
+    const option = document.createElement("md-select-option");
     option.value = role;
-    option.textContent = role;
     option.selected = role === value;
+    const headline = document.createElement("span");
+    headline.slot = "headline";
+    headline.textContent = role;
+    option.append(headline);
     select.append(option);
   }
+  select.value = value;
   return select;
 }
 
@@ -156,20 +160,28 @@ async function loadShareUsers() {
   }
   const users = await request("/users");
   shareUsers.replaceChildren();
-  const placeholder = document.createElement("option");
+  const placeholder = document.createElement("md-select-option");
   placeholder.value = "";
-  placeholder.textContent = "Choose a user";
+  placeholder.selected = true;
+  const placeholderText = document.createElement("span");
+  placeholderText.slot = "headline";
+  placeholderText.textContent = "Choose a user";
+  placeholder.append(placeholderText);
   shareUsers.append(placeholder);
 
   const candidates = (users || []).filter(
     (user) => user.id !== currentUserId && !user.disabled
   );
   for (const user of candidates) {
-    const option = document.createElement("option");
+    const option = document.createElement("md-select-option");
     option.value = String(user.id);
-    option.textContent = user.username;
+    const headline = document.createElement("span");
+    headline.slot = "headline";
+    headline.textContent = user.username;
+    option.append(headline);
     shareUsers.append(option);
   }
+  shareUsers.value = "";
   shareUsers.disabled = candidates.length === 0;
 }
 
@@ -316,8 +328,10 @@ if (shareGrantForm) {
   shareGrantForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     clearError(sharesDialog);
-    const userId = Number(shareGrantForm.elements.user_id.value);
-    const role = shareGrantForm.elements.role.value;
+    const userSelect = shareGrantForm.querySelector('[name="user_id"]');
+    const roleSelect = shareGrantForm.querySelector('[name="role"]');
+    const userId = Number(userSelect.value);
+    const role = roleSelect.value;
     if (!userId) {
       showError(sharesDialog, "Choose a user to share with.");
       return;
@@ -327,7 +341,8 @@ if (shareGrantForm) {
         method: "POST",
         body: JSON.stringify({ user_id: userId, role }),
       });
-      shareGrantForm.reset();
+      userSelect.value = "";
+      roleSelect.value = "viewer";
       await loadShares(currentStory.id);
     } catch (error) {
       showError(sharesDialog, error.message);
