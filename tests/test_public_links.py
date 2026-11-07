@@ -7,9 +7,11 @@ Seams:
   GET    /public/<slug>
 """
 
+from typing import Any
+
 from box_of_twine.users import create_user
 
-NEW_STORY = {
+NEW_STORY: dict[str, Any] = {
     "name": "The Clockwork Garden",
     "start": "Start",
     "format": "Harlowe",
