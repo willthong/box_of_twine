@@ -58,6 +58,36 @@
     }
   }
 
+  function showSaveStatus(message) {
+    var pill = document.getElementById("box-of-twine-save-status");
+    if (!pill) {
+      pill = document.createElement("div");
+      pill.id = "box-of-twine-save-status";
+      pill.setAttribute("role", "status");
+      pill.style.cssText =
+        "position:fixed;right:16px;bottom:16px;z-index:2147483647;" +
+        "padding:6px 12px;border-radius:4px;background:#222;color:#fff;" +
+        "font:13px sans-serif;pointer-events:none;";
+      var attach = function () {
+        document.body.appendChild(pill);
+      };
+      if (document.body) {
+        attach();
+      } else {
+        document.addEventListener("DOMContentLoaded", attach);
+      }
+    }
+    pill.textContent = message;
+    return pill;
+  }
+
+  function hideSaveStatus() {
+    var pill = document.getElementById("box-of-twine-save-status");
+    if (pill && pill.parentNode) {
+      pill.parentNode.removeChild(pill);
+    }
+  }
+
   function uuid() {
     if (window.crypto && typeof window.crypto.randomUUID === "function") {
       return window.crypto.randomUUID();
@@ -187,6 +217,9 @@
   var writable = true;
   var holdsLock = false;
   var released = false;
+  var savedTimer = null;
+  var retryTimer = null;
+  var dirty = false;
 
   function stopHeartbeat() {
     if (heartbeat) {
@@ -228,10 +261,19 @@
     banner.appendChild(button);
   }
 
+  function stopRetry() {
+    if (retryTimer) {
+      clearTimeout(retryTimer);
+      retryTimer = null;
+    }
+  }
+
   function block(holder) {
     writable = false;
     holdsLock = false;
     stopHeartbeat();
+    stopRetry();
+    hideSaveStatus();
     var banner = showBanner(
       "This story is being edited by " +
         (holder || "another user") +
@@ -246,6 +288,8 @@
     writable = false;
     holdsLock = false;
     stopHeartbeat();
+    stopRetry();
+    hideSaveStatus();
     showBanner("You no longer have permission to edit this story.");
   }
 
@@ -253,6 +297,8 @@
     writable = false;
     holdsLock = false;
     stopHeartbeat();
+    stopRetry();
+    hideSaveStatus();
     showBanner("This story is no longer available.");
   }
 
@@ -343,7 +389,39 @@
     return { story: storyRecord, passages: passages };
   }
 
+  function showSaved() {
+    if (savedTimer) {
+      clearTimeout(savedTimer);
+    }
+    showSaveStatus("Saved");
+    savedTimer = setTimeout(hideSaveStatus, 2000);
+  }
+
+  function showSaveFailure() {
+    if (!writable) {
+      return;
+    }
+    if (savedTimer) {
+      clearTimeout(savedTimer);
+      savedTimer = null;
+    }
+    showSaveStatus("Couldn't save — retrying…");
+    stopRetry();
+    retryTimer = setTimeout(function () {
+      retryTimer = null;
+      if (writable) {
+        sync();
+      }
+    }, 5000);
+  }
+
   function send(payload) {
+    if (savedTimer) {
+      clearTimeout(savedTimer);
+      savedTimer = null;
+    }
+    stopRetry();
+    showSaveStatus("Saving…");
     fetch(saveUrl, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -352,16 +430,23 @@
       keepalive: true,
     })
       .then(function (response) {
-        if (response.status === 409) {
+        if (response.ok) {
+          dirty = false;
+          showSaved();
+        } else if (response.status === 409) {
           block();
           acquire();
         } else if (response.status === 403) {
           deny();
         } else if (response.status === 404) {
           gone();
+        } else {
+          showSaveFailure();
         }
       })
-      .catch(function () {});
+      .catch(function () {
+        showSaveFailure();
+      });
   }
 
   function sync() {
@@ -384,22 +469,42 @@
   var originalSetItem = localStorage.setItem.bind(localStorage);
   var originalRemoveItem = localStorage.removeItem.bind(localStorage);
 
+  function isStoryKey(key) {
+    return (
+      key === "twine-stories" ||
+      key.indexOf("twine-stories-") === 0 ||
+      key === "twine-passages" ||
+      key.indexOf("twine-passages-") === 0
+    );
+  }
+
   localStorage.setItem = function (key, value) {
     originalSetItem(key, value);
     if (typeof key === "string" && key.indexOf("twine-") === 0) {
+      if (isStoryKey(key)) {
+        dirty = true;
+      }
       schedule();
     }
   };
   localStorage.removeItem = function (key) {
     originalRemoveItem(key);
     if (typeof key === "string" && key.indexOf("twine-") === 0) {
+      if (isStoryKey(key)) {
+        dirty = true;
+      }
       schedule();
     }
   };
   window.addEventListener("pagehide", release);
-  window.addEventListener("beforeunload", function () {
+  window.addEventListener("beforeunload", function (event) {
     sync();
     release();
+    if (dirty && event) {
+      event.preventDefault();
+      event.returnValue = "";
+      return "";
+    }
   });
   }
 

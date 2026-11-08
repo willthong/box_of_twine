@@ -142,8 +142,11 @@ function makeTimers() {
         timer.cleared = true;
       }
     },
-    runTimeouts() {
-      const pending = timeouts.filter((timer) => !timer.cleared);
+    runTimeouts(delay) {
+      const pending = timeouts.filter(
+        (timer) =>
+          !timer.cleared && (delay === undefined || timer.delay === delay)
+      );
       pending.forEach((timer) => timer.callback());
     },
     runIntervals() {
@@ -162,12 +165,32 @@ function makeResponse(status, body) {
   };
 }
 
+function unloadEvent() {
+  return {
+    preventDefaultCalls: 0,
+    returnValue: undefined,
+    preventDefault() {
+      this.preventDefaultCalls += 1;
+    },
+  };
+}
+
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((onResolve, onReject) => {
+    resolve = onResolve;
+    reject = onReject;
+  });
+  return { promise, resolve, reject };
+}
+
 function makeFetch(handler = () => makeResponse(200, {})) {
   const calls = [];
   const fetch = (url, options = {}) => {
     const call = { url, options, method: options.method || "GET" };
     calls.push(call);
-    return Promise.resolve(handler(call));
+    return Promise.resolve().then(() => handler(call));
   };
   fetch.calls = calls;
   return fetch;
@@ -239,6 +262,7 @@ function openEditor(store, storyId, passages, options = {}) {
     dom,
     windowListeners,
     banner: () => findById(dom.body, "box-of-twine-banner"),
+    saveStatus: () => findById(dom.body, "box-of-twine-save-status"),
   };
 }
 
@@ -375,6 +399,11 @@ assert.deepStrictEqual(
     "a viewer's edits must never be sent to the save endpoint"
   );
 
+  assert.strictEqual(
+    viewer.saveStatus(),
+    null,
+    "viewers must never see a save status pill"
+  );
   const viewerBanner = viewer.banner();
   assert.ok(viewerBanner, "viewers must see a read-only banner");
   assert.match(
@@ -534,6 +563,11 @@ assert.deepStrictEqual(
     /being edited by bob/i,
     "a save conflict must name the current lock holder"
   );
+  assert.strictEqual(
+    conflicted.saveStatus(),
+    null,
+    "the persistent lock banner must replace the transient save pill"
+  );
 
   conflictStore.setItem(
     "twine-stories-10",
@@ -688,6 +722,205 @@ assert.deepStrictEqual(
     /no longer have permission/i,
     "a 403 must explain that write access was revoked"
   );
+
+  // A save in flight is visible to the user.
+  const savingStore = new Store();
+  let savingPut;
+  const savingFetch = makeFetch((call) => {
+    if (call.method === "PUT") {
+      savingPut = deferred();
+      return savingPut.promise;
+    }
+    return makeResponse(200, {});
+  });
+  const saving = openEditor(savingStore, 15, mintPassages(["Start"], 15), {
+    role: "editor",
+    fetch: savingFetch,
+  });
+  await flush();
+
+  savingStore.setItem(
+    "twine-stories-15",
+    JSON.stringify({ id: "15", name: "In-flight edit" })
+  );
+  saving.timers.runTimeouts(300);
+  await flush();
+
+  const savingPill = saving.saveStatus();
+  assert.ok(savingPill, "a save in flight must show a status pill");
+  assert.match(
+    savingPill.textContent,
+    /saving/i,
+    "the pill must say the save is in progress"
+  );
+
+  savingPut.resolve(makeResponse(200, {}));
+  await flush();
+
+  assert.match(
+    saving.saveStatus().textContent,
+    /saved/i,
+    "a successful save must confirm that it saved"
+  );
+  saving.timers.runTimeouts(2000);
+  assert.strictEqual(
+    saving.saveStatus(),
+    null,
+    "the saved confirmation must clear itself"
+  );
+
+  // A transient network failure is reported and retried without user action.
+  const retryStore = new Store();
+  let retryPuts = 0;
+  const retryFetch = makeFetch((call) => {
+    if (call.method === "PUT") {
+      retryPuts += 1;
+      if (retryPuts === 1) {
+        return Promise.reject(new Error("offline"));
+      }
+      return makeResponse(200, {});
+    }
+    return makeResponse(200, {});
+  });
+  const retrying = openEditor(retryStore, 16, mintPassages(["Start"], 16), {
+    role: "editor",
+    fetch: retryFetch,
+  });
+  await flush();
+
+  retryStore.setItem(
+    "twine-stories-16",
+    JSON.stringify({ id: "16", name: "Offline edit" })
+  );
+  retrying.timers.runTimeouts(300);
+  await flush();
+
+  const failedPill = retrying.saveStatus();
+  assert.ok(failedPill, "a failed save must show a status pill");
+  assert.match(
+    failedPill.textContent,
+    /couldn.t save/i,
+    "the pill must say the save failed"
+  );
+  assert.match(
+    failedPill.textContent,
+    /retry/i,
+    "the pill must say it will retry"
+  );
+  assert.strictEqual(
+    retrying.timers.timeouts.filter(
+      (timer) => !timer.cleared && timer.delay === 5000
+    ).length,
+    1,
+    "a failed save must schedule a five-second retry"
+  );
+
+  retryStore.setItem(
+    "twine-stories-16",
+    JSON.stringify({ id: "16", name: "Newer offline edit" })
+  );
+  retrying.timers.runTimeouts(5000);
+  await flush();
+  assert.strictEqual(retryPuts, 2, "the retry must send the latest snapshot");
+  const retryBody = JSON.parse(
+    retryFetch.calls.filter((call) => call.method === "PUT")[1].options.body
+  );
+  assert.strictEqual(
+    retryBody.story.name,
+    "Newer offline edit",
+    "the retry must re-collect edits made after the failure"
+  );
+  assert.match(
+    retrying.saveStatus().textContent,
+    /saved/i,
+    "a successful retry must confirm that it saved"
+  );
+
+  // Closing while an edit is unconfirmed warns the user; a confirmed save
+  // clears the warning.
+  const dirtyStore = new Store();
+  const dirtyFetch = makeFetch(() => makeResponse(200, {}));
+  const dirty = openEditor(dirtyStore, 17, mintPassages(["Start"], 17), {
+    role: "editor",
+    fetch: dirtyFetch,
+  });
+  await flush();
+
+  dirtyStore.setItem(
+    "twine-stories-17",
+    JSON.stringify({ id: "17", name: "Unconfirmed edit" })
+  );
+  const dirtyEvent = unloadEvent();
+  dirty.windowListeners.beforeunload(dirtyEvent);
+  await flush();
+  assert.strictEqual(
+    dirtyEvent.preventDefaultCalls,
+    1,
+    "closing with unconfirmed edits must warn the user"
+  );
+  assert.strictEqual(
+    dirtyEvent.returnValue,
+    "",
+    "the native beforeunload prompt must be enabled"
+  );
+
+  const cleanEvent = unloadEvent();
+  dirty.windowListeners.beforeunload(cleanEvent);
+  await flush();
+  assert.strictEqual(
+    cleanEvent.preventDefaultCalls,
+    0,
+    "closing after a confirmed save must not warn"
+  );
+
+  // A server error is reported like a network failure, and a fresh edit
+  // supersedes the pending retry.
+  const flakyStore = new Store();
+  let flakyPuts = 0;
+  const flakyFetch = makeFetch((call) => {
+    if (call.method === "PUT") {
+      flakyPuts += 1;
+      return flakyPuts === 1
+        ? makeResponse(500, {})
+        : makeResponse(200, {});
+    }
+    return makeResponse(200, {});
+  });
+  const flaky = openEditor(flakyStore, 18, mintPassages(["Start"], 18), {
+    role: "editor",
+    fetch: flakyFetch,
+  });
+  await flush();
+
+  flakyStore.setItem(
+    "twine-stories-18",
+    JSON.stringify({ id: "18", name: "Server error edit" })
+  );
+  flaky.timers.runTimeouts(300);
+  await flush();
+  assert.match(
+    flaky.saveStatus().textContent,
+    /couldn.t save/i,
+    "a 5xx must be reported as a failed save"
+  );
+
+  flakyStore.setItem(
+    "twine-stories-18",
+    JSON.stringify({ id: "18", name: "Newer edit" })
+  );
+  flaky.timers.runTimeouts(300);
+  await flush();
+  assert.strictEqual(flakyPuts, 2, "a fresh edit must start a new save");
+  assert.strictEqual(
+    flaky.timers.timeouts.filter(
+      (timer) => !timer.cleared && timer.delay === 5000
+    ).length,
+    0,
+    "a fresh save must cancel the pending retry"
+  );
+  flaky.timers.runTimeouts(5000);
+  await flush();
+  assert.strictEqual(flakyPuts, 2, "the cancelled retry must not fire");
 
   console.log("editor bootstrap preserves story storage and Twine routes");
 })().catch((error) => {
