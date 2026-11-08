@@ -21,8 +21,42 @@
   }
 
   var storyId = data.storyId;
+  var role = data.role || "owner";
+  var isPlayback = /^#\/stories\/[^/]+\/(play|proof|test)(\/|$)/.test(
+    window.location.hash || ""
+  );
   var story = data.story;
   var passages = data.passages || [];
+
+  function showBanner(message) {
+    var banner = document.getElementById("box-of-twine-banner");
+    if (!banner) {
+      banner = document.createElement("div");
+      banner.id = "box-of-twine-banner";
+      banner.setAttribute("role", "status");
+      banner.style.cssText =
+        "position:fixed;top:0;left:0;right:0;z-index:2147483647;" +
+        "padding:8px 16px;background:#5c2b29;color:#fff;" +
+        "font:14px sans-serif;text-align:center;pointer-events:none;";
+      var attach = function () {
+        document.body.appendChild(banner);
+      };
+      if (document.body) {
+        attach();
+      } else {
+        document.addEventListener("DOMContentLoaded", attach);
+      }
+    }
+    banner.textContent = message;
+    return banner;
+  }
+
+  function hideBanner() {
+    var banner = document.getElementById("box-of-twine-banner");
+    if (banner && banner.parentNode) {
+      banner.parentNode.removeChild(banner);
+    }
+  }
 
   function uuid() {
     if (window.crypto && typeof window.crypto.randomUUID === "function") {
@@ -146,8 +180,134 @@
   ensurePref("welcomeSeen", true);
 
   // Persist edits back to the server.
+  if (role !== "viewer" && !isPlayback) {
   var saveUrl = "/stories/" + storyId + "/editor";
+  var lockUrl = "/stories/" + storyId + "/lock";
   var timer = null;
+  var writable = true;
+  var holdsLock = false;
+  var released = false;
+
+  function stopHeartbeat() {
+    if (heartbeat) {
+      clearInterval(heartbeat);
+      heartbeat = null;
+    }
+  }
+
+  function addTakeover(banner, holder) {
+    var button = document.createElement("button");
+    button.id = "box-of-twine-takeover";
+    button.type = "button";
+    button.textContent = "Take over editing";
+    button.style.cssText =
+      "pointer-events:auto;margin-left:12px;padding:2px 10px;" +
+      "font:inherit;cursor:pointer;";
+    var confirming = false;
+    button.addEventListener("click", function () {
+      if (!confirming) {
+        confirming = true;
+        button.textContent = "End " + holder + "'s editing session?";
+        return;
+      }
+      button.disabled = true;
+      fetch(lockUrl, { method: "DELETE", credentials: "same-origin" })
+        .catch(function () {})
+        .then(function () {
+          return acquire();
+        })
+        .then(function () {
+          if (writable) {
+            sync();
+          }
+        })
+        .catch(function () {
+          button.disabled = false;
+        });
+    });
+    banner.appendChild(button);
+  }
+
+  function block(holder) {
+    writable = false;
+    holdsLock = false;
+    stopHeartbeat();
+    var banner = showBanner(
+      "This story is being edited by " +
+        (holder || "another user") +
+        ". Your changes will not be saved."
+    );
+    if (role === "owner" && holder) {
+      addTakeover(banner, holder);
+    }
+  }
+
+  function deny() {
+    writable = false;
+    holdsLock = false;
+    stopHeartbeat();
+    showBanner("You no longer have permission to edit this story.");
+  }
+
+  function gone() {
+    writable = false;
+    holdsLock = false;
+    stopHeartbeat();
+    showBanner("This story is no longer available.");
+  }
+
+  function acquire() {
+    return fetch(lockUrl, { method: "POST", credentials: "same-origin" })
+      .then(function (response) {
+        if (response.status === 409) {
+          return response.json().then(function (body) {
+            block(body && body.holder);
+          });
+        }
+        if (response.status === 403) {
+          deny();
+        }
+        if (response.status === 404) {
+          gone();
+        }
+        if (response.status === 200) {
+          writable = true;
+          holdsLock = true;
+          released = false;
+          hideBanner();
+          startHeartbeat();
+        }
+      })
+      .catch(function () {});
+  }
+
+  function release() {
+    if (!holdsLock || released) {
+      return;
+    }
+    released = true;
+    fetch(lockUrl, {
+      method: "DELETE",
+      credentials: "same-origin",
+      keepalive: true,
+    }).catch(function () {});
+  }
+
+  var heartbeat = null;
+
+  function startHeartbeat() {
+    if (heartbeat) {
+      return;
+    }
+    heartbeat = setInterval(function () {
+      if (writable) {
+        acquire();
+      }
+    }, 60000);
+  }
+
+  startHeartbeat();
+  acquire();
 
   function collect() {
     var storyRaw = localStorage.getItem("twine-stories-" + storyId);
@@ -190,10 +350,24 @@
       body: JSON.stringify(payload),
       credentials: "same-origin",
       keepalive: true,
-    });
+    })
+      .then(function (response) {
+        if (response.status === 409) {
+          block();
+          acquire();
+        } else if (response.status === 403) {
+          deny();
+        } else if (response.status === 404) {
+          gone();
+        }
+      })
+      .catch(function () {});
   }
 
   function sync() {
+    if (!writable) {
+      return;
+    }
     var payload = collect();
     if (payload) {
       send(payload);
@@ -222,7 +396,12 @@
       schedule();
     }
   };
-  window.addEventListener("beforeunload", sync);
+  window.addEventListener("pagehide", release);
+  window.addEventListener("beforeunload", function () {
+    sync();
+    release();
+  });
+  }
 
   // Twine opens Play/Proof/Test in a new window with fragment-only URLs like
   // #/stories/<id>/test/<passageId>. The injected <base href="/static/twine/">
@@ -245,5 +424,9 @@
     history.replaceState(null, "", target + (window.location.hash || hash));
   } else if (!window.location.hash) {
     history.replaceState(null, "", target + hash);
+  }
+
+  if (role === "viewer" && !isPlayback) {
+    showBanner("You can view this story, but not edit it.");
   }
 })();

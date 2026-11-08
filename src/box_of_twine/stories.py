@@ -215,6 +215,7 @@ def _editor_shell(story_id: int) -> str:
     source = json.loads(source_path(access.story_owner_id, story_id).read_text())
     payload = canonical_to_internal(source, story_id)
     payload["storyId"] = str(story_id)
+    payload["role"] = access.role
     data_json = json.dumps(payload).replace("<", "\\u003c")
 
     static_folder = current_app.static_folder

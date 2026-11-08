@@ -43,6 +43,136 @@ class Store {
   }
 }
 
+function makeElement(tagName) {
+  return {
+    tagName: String(tagName).toUpperCase(),
+    style: {},
+    dataset: {},
+    textContent: "",
+    id: "",
+    children: [],
+    parentNode: null,
+    listeners: {},
+    appendChild(child) {
+      child.parentNode = this;
+      this.children.push(child);
+      return child;
+    },
+    removeChild(child) {
+      this.children = this.children.filter((entry) => entry !== child);
+      child.parentNode = null;
+    },
+    remove() {
+      if (this.parentNode) {
+        this.parentNode.removeChild(this);
+      }
+    },
+    setAttribute(name, value) {
+      this[name] = value;
+    },
+    addEventListener(type, callback) {
+      this.listeners[type] = callback;
+    },
+  };
+}
+
+function findById(root, id) {
+  if (root.id === id) {
+    return root;
+  }
+  for (const child of root.children) {
+    const found = findById(child, id);
+    if (found) {
+      return found;
+    }
+  }
+  return null;
+}
+
+function makeDom(payload) {
+  const documentListeners = {};
+  const body = makeElement("body");
+  const documentElement = makeElement("html");
+  documentElement.appendChild(body);
+  const dataElement = makeElement("script");
+  dataElement.id = "box-of-twine-editor-data";
+  dataElement.textContent = JSON.stringify(payload);
+  const elements = new Map([[dataElement.id, dataElement]]);
+  return {
+    body,
+    documentListeners,
+    elements,
+    document: {
+      body,
+      documentElement,
+      getElementById(id) {
+        return elements.get(id) || findById(documentElement, id);
+      },
+      createElement: makeElement,
+      addEventListener(type, callback) {
+        documentListeners[type] = callback;
+      },
+    },
+  };
+}
+
+function makeTimers() {
+  const timeouts = [];
+  const intervals = [];
+  return {
+    timeouts,
+    intervals,
+    setTimeout(callback, delay) {
+      const timer = { callback, delay, cleared: false };
+      timeouts.push(timer);
+      return timer;
+    },
+    clearTimeout(timer) {
+      if (timer) {
+        timer.cleared = true;
+      }
+    },
+    setInterval(callback, delay) {
+      const timer = { callback, delay, cleared: false };
+      intervals.push(timer);
+      return timer;
+    },
+    clearInterval(timer) {
+      if (timer) {
+        timer.cleared = true;
+      }
+    },
+    runTimeouts() {
+      const pending = timeouts.filter((timer) => !timer.cleared);
+      pending.forEach((timer) => timer.callback());
+    },
+    runIntervals() {
+      intervals
+        .filter((timer) => !timer.cleared)
+        .forEach((timer) => timer.callback());
+    },
+  };
+}
+
+function makeResponse(status, body) {
+  return {
+    status,
+    ok: status >= 200 && status < 300,
+    json: async () => body,
+  };
+}
+
+function makeFetch(handler = () => makeResponse(200, {})) {
+  const calls = [];
+  const fetch = (url, options = {}) => {
+    const call = { url, options, method: options.method || "GET" };
+    calls.push(call);
+    return Promise.resolve(handler(call));
+  };
+  fetch.calls = calls;
+  return fetch;
+}
+
 function openEditor(store, storyId, passages, options = {}) {
   const location = {
     pathname: options.pathname || `/edit/${storyId}`,
@@ -51,6 +181,7 @@ function openEditor(store, storyId, passages, options = {}) {
   const openCalls = [];
   const payload = {
     storyId: String(storyId),
+    role: options.role || "owner",
     story: {
       id: String(storyId),
       name: "Story",
@@ -60,13 +191,19 @@ function openEditor(store, storyId, passages, options = {}) {
     },
     passages,
   };
+  const timers = makeTimers();
+  const fetch = options.fetch || makeFetch();
+  const dom = makeDom(payload);
+  const windowListeners = {};
   const sandbox = {
     console,
     JSON,
     Math,
     Uint8Array,
-    setTimeout: () => 0,
-    clearTimeout: () => {},
+    setTimeout: timers.setTimeout,
+    clearTimeout: timers.clearTimeout,
+    setInterval: timers.setInterval,
+    clearInterval: timers.clearInterval,
     localStorage: store,
     history: {
       replaceState(_state, _title, url) {
@@ -75,14 +212,8 @@ function openEditor(store, storyId, passages, options = {}) {
         location.hash = hash ? `#${hash}` : "";
       },
     },
-    document: {
-      getElementById(id) {
-        return id === "box-of-twine-editor-data"
-          ? { textContent: JSON.stringify(payload) }
-          : null;
-      },
-    },
-    fetch: () => Promise.resolve(),
+    document: dom.document,
+    fetch,
     crypto: { randomUUID: () => crypto.randomUUID() },
   };
   sandbox.window = sandbox;
@@ -91,11 +222,27 @@ function openEditor(store, storyId, passages, options = {}) {
     openCalls.push({ url, name, features });
     return {};
   };
-  sandbox.window.addEventListener = () => {};
+  sandbox.window.addEventListener = (type, callback) => {
+    windowListeners[type] = callback;
+  };
   vm.createContext(sandbox);
   vm.runInContext(BOOTSTRAP, sandbox);
-  return { location, sandbox, openCalls };
+  if (dom.documentListeners.DOMContentLoaded) {
+    dom.documentListeners.DOMContentLoaded();
+  }
+  return {
+    location,
+    sandbox,
+    openCalls,
+    fetch,
+    timers,
+    dom,
+    windowListeners,
+    banner: () => findById(dom.body, "box-of-twine-banner"),
+  };
 }
+
+const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 function twinePassagesFor(store, storyId) {
   return (store.getItem("twine-passages") || "")
@@ -198,4 +345,352 @@ assert.deepStrictEqual(
   "loading the shell must not rewrite a test route back to the story"
 );
 
-console.log("editor bootstrap preserves story storage and Twine routes");
+(async () => {
+  // A viewer must never take the lock or send story edits, and must be told
+  // the editor is read-only.
+  const viewerStore = new Store();
+  const viewerFetch = makeFetch();
+  const viewer = openEditor(viewerStore, 7, mintPassages(["Start", "Gate"], 7), {
+    role: "viewer",
+    fetch: viewerFetch,
+  });
+  await flush();
+
+  assert.strictEqual(
+    viewerFetch.calls.length,
+    0,
+    "opening the editor as a viewer must not call the lock or save endpoints"
+  );
+
+  // Twine still writes localStorage; the viewer bootstrap must not persist it.
+  viewerStore.setItem(
+    "twine-stories-7",
+    JSON.stringify({ id: "7", name: "Changed by a viewer" })
+  );
+  viewer.timers.runTimeouts();
+  await flush();
+  assert.strictEqual(
+    viewerFetch.calls.filter((call) => call.method === "PUT").length,
+    0,
+    "a viewer's edits must never be sent to the save endpoint"
+  );
+
+  const viewerBanner = viewer.banner();
+  assert.ok(viewerBanner, "viewers must see a read-only banner");
+  assert.match(
+    viewerBanner.textContent,
+    /not edit/i,
+    "the viewer banner must explain that editing is unavailable"
+  );
+
+  // A writer takes the story's edit lock on entering the editor.
+  const writerStore = new Store();
+  const writerFetch = makeFetch(() => makeResponse(200, {}));
+  const writer = openEditor(writerStore, 8, mintPassages(["Start"], 8), {
+    role: "editor",
+    fetch: writerFetch,
+  });
+  await flush();
+
+  assert.strictEqual(
+    writerFetch.calls.filter(
+      (call) => call.url === "/stories/8/lock" && call.method === "POST"
+    ).length,
+    1,
+    "an editor must acquire the lock on entering the editor"
+  );
+
+  // The lock is renewed on a heartbeat while the editor remains writable.
+  assert.strictEqual(
+    writer.timers.intervals.filter((timer) => timer.delay === 60000).length,
+    1,
+    "a writer must have a 60-second lock heartbeat"
+  );
+  writer.timers.runIntervals();
+  await flush();
+  assert.strictEqual(
+    writerFetch.calls.filter(
+      (call) => call.url === "/stories/8/lock" && call.method === "POST"
+    ).length,
+    2,
+    "the heartbeat must renew the lock"
+  );
+
+  // Closing the editor releases the lock once.
+  assert.ok(writer.windowListeners.pagehide, "the editor must release on pagehide");
+  writer.windowListeners.pagehide();
+  await flush();
+  assert.strictEqual(
+    writerFetch.calls.filter(
+      (call) => call.url === "/stories/8/lock" && call.method === "DELETE"
+    ).length,
+    1,
+    "leaving the editor must release the lock"
+  );
+  writer.windowListeners.beforeunload();
+  await flush();
+  assert.strictEqual(
+    writerFetch.calls.filter(
+      (call) => call.url === "/stories/8/lock" && call.method === "DELETE"
+    ).length,
+    1,
+    "releasing twice must not send a second DELETE"
+  );
+
+  // When someone else holds the lock, the editor names them and stops
+  // sending edits.
+  const lockedStore = new Store();
+  const lockedFetch = makeFetch((call) =>
+    call.url === "/stories/9/lock" && call.method === "POST"
+      ? makeResponse(409, { holder: "bob" })
+      : makeResponse(200, {})
+  );
+  const locked = openEditor(lockedStore, 9, mintPassages(["Start"], 9), {
+    role: "editor",
+    fetch: lockedFetch,
+  });
+  await flush();
+
+  const lockedBanner = locked.banner();
+  assert.ok(lockedBanner, "a blocked editor must see a banner");
+  assert.match(
+    lockedBanner.textContent,
+    /being edited by bob/i,
+    "the banner must name the lock holder"
+  );
+  assert.match(
+    lockedBanner.textContent,
+    /will not be saved/i,
+    "the banner must warn that edits will not be saved"
+  );
+
+  assert.strictEqual(
+    findById(lockedBanner, "box-of-twine-takeover"),
+    null,
+    "a plain editor must not be offered a lock takeover"
+  );
+
+  lockedStore.setItem(
+    "twine-stories-9",
+    JSON.stringify({ id: "9", name: "Blocked edit" })
+  );
+  locked.timers.runTimeouts();
+  await flush();
+  assert.strictEqual(
+    lockedFetch.calls.filter((call) => call.method === "PUT").length,
+    0,
+    "a blocked editor must not send story edits"
+  );
+
+  assert.strictEqual(
+    locked.timers.intervals.filter((timer) => !timer.cleared).length,
+    0,
+    "a blocked editor must stop its lock heartbeat"
+  );
+
+  locked.windowListeners.pagehide();
+  await flush();
+  assert.strictEqual(
+    lockedFetch.calls.filter((call) => call.method === "DELETE").length,
+    0,
+    "a blocked editor must not release someone else's lock"
+  );
+
+  // If the lock is lost after entering, the next save reports a conflict and
+  // the editor switches to the same blocked state.
+  const conflictStore = new Store();
+  let conflictLockPosts = 0;
+  const conflictFetch = makeFetch((call) => {
+    if (call.url === "/stories/10/lock" && call.method === "POST") {
+      conflictLockPosts += 1;
+      return conflictLockPosts === 1
+        ? makeResponse(200, {})
+        : makeResponse(409, { holder: "bob" });
+    }
+    if (call.method === "PUT") {
+      return makeResponse(409, {});
+    }
+    return makeResponse(200, {});
+  });
+  const conflicted = openEditor(
+    conflictStore,
+    10,
+    mintPassages(["Start"], 10),
+    { role: "editor", fetch: conflictFetch }
+  );
+  await flush();
+
+  conflictStore.setItem(
+    "twine-stories-10",
+    JSON.stringify({ id: "10", name: "Losing edit" })
+  );
+  conflicted.timers.runTimeouts();
+  await flush();
+
+  const conflictBanner = conflicted.banner();
+  assert.ok(conflictBanner, "a save conflict must show the blocked banner");
+  assert.match(
+    conflictBanner.textContent,
+    /being edited by bob/i,
+    "a save conflict must name the current lock holder"
+  );
+
+  conflictStore.setItem(
+    "twine-stories-10",
+    JSON.stringify({ id: "10", name: "Later edit" })
+  );
+  conflicted.timers.runTimeouts();
+  await flush();
+  assert.strictEqual(
+    conflictFetch.calls.filter((call) => call.method === "PUT").length,
+    1,
+    "a save conflict must stop later saves"
+  );
+
+  // A story that disappears while open is reported plainly.
+  const goneStore = new Store();
+  const goneFetch = makeFetch((call) =>
+    call.url === "/stories/11/lock" && call.method === "POST"
+      ? makeResponse(404, {})
+      : makeResponse(200, {})
+  );
+  const gone = openEditor(goneStore, 11, mintPassages(["Start"], 11), {
+    role: "editor",
+    fetch: goneFetch,
+  });
+  await flush();
+
+  const goneBanner = gone.banner();
+  assert.ok(goneBanner, "a deleted story must show a banner");
+  assert.match(
+    goneBanner.textContent,
+    /no longer available/i,
+    "the banner must say the story is gone"
+  );
+
+  // Play/Proof/Test windows are playback: no lock and no saving.
+  const playStore = new Store();
+  const playFetch = makeFetch();
+  const play = openEditor(playStore, 12, mintPassages(["Start"], 12), {
+    role: "editor",
+    fetch: playFetch,
+    hash: "#/stories/12/play",
+  });
+  await flush();
+
+  assert.strictEqual(
+    playFetch.calls.length,
+    0,
+    "a playback window must not take the lock or save the story"
+  );
+  playStore.setItem(
+    "twine-stories-12",
+    JSON.stringify({ id: "12", name: "Playback edit" })
+  );
+  play.timers.runTimeouts();
+  await flush();
+  assert.strictEqual(
+    playFetch.calls.filter((call) => call.method === "PUT").length,
+    0,
+    "a playback window must never send story edits"
+  );
+
+  // An owner can displace the current holder after an inline confirmation,
+  // then the editor re-acquires and flushes edits made while blocked.
+  const takeoverStore = new Store();
+  let takeoverLockPosts = 0;
+  const takeoverFetch = makeFetch((call) => {
+    if (call.url === "/stories/13/lock") {
+      if (call.method === "DELETE") {
+        return makeResponse(204, {});
+      }
+      if (call.method === "POST") {
+        takeoverLockPosts += 1;
+        return takeoverLockPosts === 1
+          ? makeResponse(409, { holder: "bob" })
+          : makeResponse(200, {});
+      }
+    }
+    return makeResponse(200, {});
+  });
+  const takeover = openEditor(
+    takeoverStore,
+    13,
+    mintPassages(["Start"], 13),
+    { role: "owner", fetch: takeoverFetch }
+  );
+  await flush();
+
+  const takeoverBanner = takeover.banner();
+  const takeoverButton = findById(takeoverBanner, "box-of-twine-takeover");
+  assert.ok(takeoverButton, "an owner must be offered a lock takeover");
+  assert.match(takeoverButton.textContent, /take over/i);
+
+  takeoverButton.listeners.click();
+  await flush();
+  assert.strictEqual(
+    takeoverFetch.calls.filter((call) => call.method === "DELETE").length,
+    0,
+    "the first click must ask for confirmation, not break the lock"
+  );
+  assert.match(
+    takeoverButton.textContent,
+    /bob/i,
+    "the confirmation must name the displaced editor"
+  );
+
+  takeoverButton.listeners.click();
+  await flush();
+  assert.strictEqual(
+    takeoverFetch.calls.filter((call) => call.method === "DELETE").length,
+    1,
+    "confirming a takeover must break the current lock"
+  );
+  assert.strictEqual(
+    takeoverLockPosts,
+    2,
+    "confirming a takeover must re-acquire the lock"
+  );
+  assert.strictEqual(
+    takeover.banner(),
+    null,
+    "a successful takeover must clear the blocked banner"
+  );
+  assert.strictEqual(
+    takeoverFetch.calls.filter((call) => call.method === "PUT").length,
+    1,
+    "a successful takeover must flush edits made while blocked"
+  );
+
+  assert.strictEqual(
+    takeover.timers.intervals.filter(
+      (timer) => !timer.cleared && timer.delay === 60000
+    ).length,
+    1,
+    "a successful takeover must resume the lock heartbeat"
+  );
+
+  // Losing write permission is reported as a permission problem, not as
+  // someone else's lock.
+  const revokedStore = new Store();
+  const revokedFetch = makeFetch((call) =>
+    call.url === "/stories/14/lock" && call.method === "POST"
+      ? makeResponse(403, {})
+      : makeResponse(200, {})
+  );
+  const revoked = openEditor(revokedStore, 14, mintPassages(["Start"], 14), {
+    role: "editor",
+    fetch: revokedFetch,
+  });
+  await flush();
+  assert.match(
+    revoked.banner().textContent,
+    /no longer have permission/i,
+    "a 403 must explain that write access was revoked"
+  );
+
+  console.log("editor bootstrap preserves story storage and Twine routes");
+})().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
