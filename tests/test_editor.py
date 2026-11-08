@@ -256,3 +256,19 @@ def test_editor_bootstrap_routes_twine_to_the_story_hash_route(client):
     assert response.status_code == 200
     script = response.get_data(as_text=True)
     assert '"#/stories/" + storyId' in script
+
+
+def test_editor_shell_embeds_the_callers_role_for_the_lock_lifecycle(
+    app, client, admin
+):
+    login_as(client, admin)
+    created = client.post("/stories", json=SOURCE)
+    story_id = created.get_json()["id"]
+
+    response = client.get(f"/edit/{story_id}")
+    assert response.status_code == 200
+
+    payload = json.loads(
+        response.data.split(b'id="box-of-twine-editor-data">')[1].split(b"</script>")[0]
+    )
+    assert payload["role"] == "owner"
