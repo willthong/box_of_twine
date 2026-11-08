@@ -12,6 +12,7 @@ anyone with the URL, a private one only by the story's owner, and a shared
 one by the story's named users.
 """
 
+from html.parser import HTMLParser
 from typing import Any
 
 from box_of_twine.users import create_user
@@ -26,6 +27,45 @@ NEW_STORY: dict[str, Any] = {
         {"name": "Gate", "text": "A gate hums with clockwork."},
     ],
 }
+
+
+class _StoryDataParser(HTMLParser):
+    """Collect the story-data element and its passages from compiled HTML."""
+
+    story: dict[str, Any] | None
+    passages: list[dict[str, Any]]
+    _passage: dict[str, Any] | None
+
+    def __init__(self):
+        super().__init__()
+        self.story = None
+        self.passages = []
+        self._passage = None
+
+    def handle_starttag(self, tag, attrs):
+        values = dict(attrs)
+        if tag == "tw-storydata":
+            self.story = values
+        elif tag == "tw-passagedata":
+            self._passage = {"attrs": values, "text": []}
+
+    def handle_data(self, data):
+        if self._passage is not None:
+            self._passage["text"].append(data)
+
+    def handle_endtag(self, tag):
+        if tag == "tw-passagedata" and self._passage is not None:
+            self._passage["text"] = "".join(self._passage["text"])
+            self.passages.append(self._passage)
+            self._passage = None
+
+
+def compiled_story(html):
+    """The story format contract embedded in compiled HTML: Twine story data."""
+    parser = _StoryDataParser()
+    parser.feed(html.decode())
+    assert parser.story is not None, "compiled HTML has no <tw-storydata> element"
+    return parser.story, parser.passages
 
 
 def password_for(username):
@@ -86,10 +126,17 @@ def test_publishing_compiles_standalone_html_containing_the_story_data(
     assert response.mimetype == "text/html"
 
     html = response.data
-    # The story name and every passage are compiled into the artifact.
-    assert NEW_STORY["name"].encode() in html
-    for passage in NEW_STORY["passages"]:
-        assert passage["text"].encode() in html
+    story, passages = compiled_story(html)
+    assert story["name"] == NEW_STORY["name"]
+    assert story["format"] == NEW_STORY["format"]
+    assert story["format-version"] == NEW_STORY["formatVersion"]
+    assert story["startnode"] == "1"
+    assert [passage["attrs"]["name"] for passage in passages] == [
+        passage["name"] for passage in NEW_STORY["passages"]
+    ]
+    assert [passage["text"] for passage in passages] == [
+        passage["text"] for passage in NEW_STORY["passages"]
+    ]
     # The format template was substituted, not served raw.
     assert b"{{STORY_NAME}}" not in html
     assert b"{{STORY_DATA}}" not in html
@@ -170,11 +217,42 @@ def test_story_created_from_the_home_form_compiles_when_published(app, client, a
     slug = response.get_json()["slug"]
 
     html = client.get(f"/p/{slug}").data
-    assert b"Brass Meridian" in html
-    # The story's source data, not a raw template, is compiled in.
-    assert b'"passages"' in html
-    assert b"Start" in html
+    story, passages = compiled_story(html)
+    assert story["name"] == "Brass Meridian"
+    assert story["startnode"] == "1"
+    assert [(passage["attrs"]["name"], passage["text"]) for passage in passages] == [
+        ("Start", "")
+    ]
     assert b"{{STORY_DATA}}" not in html
+
+
+def test_compilation_emits_twine_story_data_with_a_start_node(app, client, admin):
+    story = {
+        "name": "Brass & Bone",
+        "start": "Gate",
+        "format": "Harlowe",
+        "formatVersion": "3.3.9",
+        "passages": [
+            {"name": "Start", "text": "A <b>bold</b> opening."},
+            {"name": "Gate", "text": 'The gate says "enter".'},
+        ],
+    }
+    login_as(client, admin)
+    story_id = client.post("/stories", json=story).get_json()["id"]
+
+    slug = publish(client, story_id, "public").get_json()["slug"]
+    html = client.get(f"/p/{slug}").data
+
+    story, passages = compiled_story(html)
+    assert story["name"] == "Brass & Bone"
+    assert story["startnode"] == "2"
+    assert [
+        (passage["attrs"]["pid"], passage["attrs"]["name"], passage["text"])
+        for passage in passages
+    ] == [
+        ("1", "Start", "A <b>bold</b> opening."),
+        ("2", "Gate", 'The gate says "enter".'),
+    ]
 
 
 def test_only_an_owner_can_create_a_publication(app, client, admin):

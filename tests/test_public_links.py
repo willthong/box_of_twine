@@ -119,6 +119,8 @@ def test_public_url_is_anonymous_and_compiles_the_latest_story(app, admin):
     assert response.mimetype == "text/html"
     assert b"The Clockwork Garden" in response.data
     assert NEW_STORY["passages"][0]["text"].encode() in response.data
+    assert b"<tw-storydata" in response.data
+    assert b'<tw-passagedata pid="1" name="Start"' in response.data
 
     edited = {**NEW_STORY, "name": "Brass Meridian"}
     assert owner.put(f"/stories/{story_id}", json=edited).status_code == 200
