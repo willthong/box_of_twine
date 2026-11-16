@@ -3,6 +3,7 @@ name = "box-of-twine"
 version = "0.1.0"
 description = "Self-hosted multi-user Twine: vendored editor, per-user story storage, sharing, and publication."
 readme = "README.md"
+license = "MIT"
 requires-python = ">=3.14"
 dependencies = [
     "flask>=3.1.3",
