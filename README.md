@@ -1,5 +1,12 @@
 # box_of_twine
+
 Self-hosted multi-user Twine: vendored editor, per-user story storage, sharing, and publication.
+
+[![CI](https://github.com/willthong/box_of_twine/actions/workflows/ci.yml/badge.svg)](https://github.com/willthong/box_of_twine/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/willthong/box_of_twine/branch/main/graph/badge.svg)](https://codecov.io/github/willthong/box_of_twine)
+[![Container](https://img.shields.io/badge/docker-ghcr.io/willthong/box__of__twine-blue)](https://github.com/willthong/box_of_twine/pkgs/container/box_of_twine)
+[![Python](https://img.shields.io/badge/python-3.14-blue)](https://img.shields.io/badge/python-3.14-blue)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
 
 ## Configuration
 

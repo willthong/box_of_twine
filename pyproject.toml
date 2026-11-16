@@ -19,6 +19,16 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/box_of_twine"]
 
+[tool.coverage.run]
+source = ["box_of_twine"]
+omit = ["*/templates/*", "*/static/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == \"__main__\":",
+]
+
 [tool.ruff]
 line-length = 90
 
@@ -28,6 +38,7 @@ testpaths = ["tests"]
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
     "ruff>=0.17.1",
     "ty>=0.0.88",
 ]
