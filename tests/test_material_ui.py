@@ -20,6 +20,19 @@ def test_material_bundle_is_served(client):
     assert b"customElements" in response.data
 
 
+def test_material_components_use_a_sans_serif_typeface(client):
+    """Material Web shadows its own text and defaults ``--md-ref-typeface-plain``
+    to ``Roboto`` with no generic fallback, so a host without Roboto installed
+    renders the fields and buttons in the browser's default serif. The inlined
+    theme must override that token with a sans-serif stack."""
+    html = client.get("/login").data
+
+    assert (
+        b'--md-ref-typeface-plain: Roboto, "Helvetica Neue", '
+        b'system-ui, -apple-system, sans-serif;'
+    ) in html
+
+
 def test_login_page_uses_material_components(client):
     html = client.get("/login").data
 

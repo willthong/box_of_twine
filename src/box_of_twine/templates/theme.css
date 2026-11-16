@@ -103,6 +103,15 @@ body {
   line-height: 1.5;
 }
 
+/* Material Web shadows its own text and defaults the plain typeface token to
+   ``Roboto`` with no generic fallback. Without this override a host that
+   lacks Roboto renders md-* fields and buttons in the browser's default
+   serif. Keep this stack in sync with ``body``. */
+:root {
+  --md-ref-typeface-plain: Roboto, "Helvetica Neue", system-ui, -apple-system, sans-serif;
+  --md-ref-typeface-brand: Roboto, "Helvetica Neue", system-ui, -apple-system, sans-serif;
+}
+
 a {
   color: var(--md-sys-color-primary);
 }
@@ -446,4 +455,20 @@ md-outlined-select {
 .share-row md-outlined-select {
   min-width: 128px;
   flex: 0 1 160px;
+}
+
+.check-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.check-label {
+  font: inherit;
+}
+
+.create-user-row {
+  margin-top: 16px;
 }
