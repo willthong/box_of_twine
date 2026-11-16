@@ -119,18 +119,21 @@ def test_form_post_reads_explicit_checkbox_values(app, client, admin):
 
 def test_form_post_resets_a_users_password(app, client, admin):
     with app.app_context():
-        bob_id = create_user("bob", "old-password")
+        bob_id = create_user("bob", "old-password", is_admin=True)
 
     login_as(client, admin["username"], admin["password"])
     response = client.post(
-        f"/admin/users/{bob_id}/update", data={"password": "new-password"}
+        f"/admin/users/{bob_id}/password", data={"password": "new-password"}
     )
 
     assert response.status_code == 303
+    assert redirect_target(response) == "/admin/users"
 
     bob = app.test_client()
     assert login_as(bob, "bob", "old-password").status_code == 401
     assert login_as(bob, "bob", "new-password").status_code == 302
+    # The password-only form must not have cleared the admin flag.
+    assert bob.get("/admin/users").status_code == 200
 
 
 def test_form_post_grants_and_revokes_admin(app, client, admin):
@@ -206,6 +209,7 @@ def test_anonymous_form_posts_redirect_to_login_and_change_nothing(app, client):
     for url, data in (
         ("/admin/users", {"username": "mallory", "password": "mallory-password"}),
         (f"/admin/users/{bob_id}/update", {"disabled": "on"}),
+        (f"/admin/users/{bob_id}/password", {"password": "mallory-password"}),
         (f"/admin/users/{bob_id}/delete", {}),
     ):
         response = client.post(url, data=data)
@@ -238,10 +242,14 @@ def test_non_admin_form_posts_are_forbidden_and_change_nothing(app, client):
     update_response = client.post(
         f"/admin/users/{carol_id}/update", data={"disabled": "on"}
     )
+    password_response = client.post(
+        f"/admin/users/{carol_id}/password", data={"password": "mallory-password"}
+    )
     delete_response = client.post(f"/admin/users/{carol_id}/delete")
 
     assert create_response.status_code == 403
     assert update_response.status_code == 403
+    assert password_response.status_code == 403
     assert delete_response.status_code == 403
 
     with app.app_context():

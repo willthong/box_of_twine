@@ -183,11 +183,17 @@ def create_from_form():
 @bp.post("/admin/users/<int:user_id>/update")
 @admin_page_required
 def update_from_form(user_id: int):
+    set_disabled(user_id, _checked(request.form, "disabled"))
+    set_admin(user_id, _checked(request.form, "is_admin"))
+    return redirect(url_for("users.admin_users"), 303)
+
+
+@bp.post("/admin/users/<int:user_id>/password")
+@admin_page_required
+def password_from_form(user_id: int):
     password = request.form.get("password")
     if password:
         set_password(user_id, password)
-    set_disabled(user_id, _checked(request.form, "disabled"))
-    set_admin(user_id, _checked(request.form, "is_admin"))
     return redirect(url_for("users.admin_users"), 303)
 
 

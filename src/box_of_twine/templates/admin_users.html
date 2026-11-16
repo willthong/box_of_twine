@@ -10,7 +10,9 @@
       <h2>Users</h2>
       <ul class="user-list">
         {% for user in users %}
-        <li class="user-card">
+        <li class="user-card"
+            data-user-id="{{ user['id'] }}"
+            data-username="{{ user['username'] }}">
           <div class="row">
             <span class="username">{{ user['username'] }}</span>
             {% if user['is_admin'] %}
@@ -19,6 +21,22 @@
             {% if user['disabled'] %}
             <span class="status-chip" data-status="disabled">disabled</span>
             {% endif %}
+            <span class="spacer"></span>
+            <details class="story-menu">
+              <summary class="story-menu-button"
+                       aria-label="User actions for {{ user['username'] }}"
+                       title="User actions">⋮</summary>
+              <div class="story-menu-panel" role="menu">
+                <button type="button" class="story-menu-item" role="menuitem"
+                        data-user-dialog="password-dialog-{{ user['id'] }}">
+                  Set password…
+                </button>
+                <button type="button" class="story-menu-item danger" role="menuitem"
+                        data-user-dialog="delete-dialog-{{ user['id'] }}">
+                  Delete user…
+                </button>
+              </div>
+            </details>
           </div>
           <form method="post"
                 action="/admin/users/{{ user['id'] }}/update"
@@ -27,42 +45,139 @@
                value for both, so saving never silently clears a flag. #}
             <input type="hidden" name="is_admin" value="off">
             <input type="hidden" name="disabled" value="off">
-            <md-outlined-text-field
-                class="grow"
-                name="password"
-                label="New password"
-                type="password"></md-outlined-text-field>
-            <md-checkbox name="is_admin" value="on" aria-label="Admin role"
-                {% if user['is_admin'] %}checked{% endif %}></md-checkbox>
-            <md-checkbox name="disabled" value="on" aria-label="Disabled"
-                {% if user['disabled'] %}checked{% endif %}></md-checkbox>
+            <label class="check-row" for="is-admin-{{ user['id'] }}">
+              <md-checkbox id="is-admin-{{ user['id'] }}"
+                           name="is_admin"
+                           value="on"
+                           {% if user['is_admin'] %}checked{% endif %}></md-checkbox>
+              <span class="check-label">Admin</span>
+            </label>
+            <label class="check-row" for="disabled-{{ user['id'] }}">
+              <md-checkbox id="disabled-{{ user['id'] }}"
+                           name="disabled"
+                           value="on"
+                           {% if user['disabled'] %}checked{% endif %}></md-checkbox>
+              <span class="check-label">Disabled</span>
+            </label>
+            <span class="spacer"></span>
             <md-filled-button type="submit">Save</md-filled-button>
-          </form>
-          <form method="post" action="/admin/users/{{ user['id'] }}/delete">
-            <md-outlined-button type="submit">Delete</md-outlined-button>
           </form>
         </li>
         {% endfor %}
       </ul>
 
-      <div class="card">
-        <h2>Create user</h2>
-        <form method="post" action="/admin/users" class="stack">
-          <md-outlined-text-field
-              name="username"
-              label="Username"
-              required></md-outlined-text-field>
-          <md-outlined-text-field
-              name="password"
-              label="Password"
-              type="password"
-              required></md-outlined-text-field>
-          <label class="row">
-            <md-checkbox name="is_admin" aria-label="Admin role"></md-checkbox>
-            Admin
-          </label>
-          <md-filled-button type="submit">Create</md-filled-button>
-        </form>
+      <div class="row create-user-row">
+        <md-filled-button id="create-user-button" type="button">
+          Create user
+        </md-filled-button>
       </div>
     </main>
+
+    {% for user in users %}
+    <dialog class="story-dialog" id="password-dialog-{{ user['id'] }}">
+      <form method="post"
+            action="/admin/users/{{ user['id'] }}/password"
+            class="stack">
+        <h2>Set password</h2>
+        <p>Set a new password for <strong>{{ user['username'] }}</strong>.</p>
+        <md-outlined-text-field
+            name="password"
+            label="New password"
+            type="password"
+            required></md-outlined-text-field>
+        <div class="row dialog-actions">
+          <md-text-button type="button" data-dialog-close>Cancel</md-text-button>
+          <md-filled-button type="submit">Save</md-filled-button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="story-dialog" id="delete-dialog-{{ user['id'] }}">
+      <form method="post"
+            action="/admin/users/{{ user['id'] }}/delete"
+            class="stack">
+        <h2>Delete user?</h2>
+        <p>
+          This permanently deletes <strong>{{ user['username'] }}</strong> and
+          all of their stories. This cannot be undone.
+        </p>
+        <div class="row dialog-actions">
+          <md-text-button type="button" data-dialog-close>Cancel</md-text-button>
+          <md-filled-button class="danger-button" type="submit">
+            Delete user
+          </md-filled-button>
+        </div>
+      </form>
+    </dialog>
+    {% endfor %}
+
+    <dialog class="story-dialog" id="create-user-dialog">
+      <form method="post" action="/admin/users" class="stack">
+        <h2>Create user</h2>
+        <md-outlined-text-field
+            name="username"
+            label="Username"
+            required></md-outlined-text-field>
+        <md-outlined-text-field
+            name="password"
+            label="Password"
+            type="password"
+            required></md-outlined-text-field>
+        <label class="check-row" for="create-is-admin">
+          <md-checkbox id="create-is-admin" name="is_admin" value="on"></md-checkbox>
+          <span class="check-label">Admin</span>
+        </label>
+        <div class="row dialog-actions">
+          <md-text-button type="button" data-dialog-close>Cancel</md-text-button>
+          <md-filled-button type="submit">Create</md-filled-button>
+        </div>
+      </form>
+    </dialog>
+
+    <script type="module">
+      const createButton = document.getElementById("create-user-button");
+      const createDialog = document.getElementById("create-user-dialog");
+
+      if (createButton && createDialog) {
+        createButton.addEventListener("click", () => createDialog.showModal());
+      }
+
+      for (const close of document.querySelectorAll("[data-dialog-close]")) {
+        close.addEventListener("click", () => {
+          close.closest("dialog").close();
+        });
+      }
+
+      document.addEventListener("click", (event) => {
+        for (const menu of document.querySelectorAll(".story-menu[open]")) {
+          if (!menu.contains(event.target)) {
+            menu.open = false;
+          }
+        }
+      });
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") {
+          return;
+        }
+        for (const menu of document.querySelectorAll(".story-menu[open]")) {
+          menu.open = false;
+        }
+      });
+
+      document.addEventListener("click", (event) => {
+        const opener = event.target.closest("[data-user-dialog]");
+        if (!opener) {
+          return;
+        }
+        const menu = opener.closest("details");
+        if (menu) {
+          menu.open = false;
+        }
+        const dialog = document.getElementById(opener.dataset.userDialog);
+        if (dialog) {
+          dialog.showModal();
+        }
+      });
+    </script>
 {% endblock %}
